@@ -81,7 +81,7 @@ def clean_text(text):
     BLOCKED_PHRASES = sorted([
         "חדשות המוקד • בטלגרם: t.me/hamoked_il",
         "בוואטסאפ: https://chat.whatsapp.com/LoxVwdYOKOAH2y2kaO8GQ7",
-        "דסק העולם הערבי,
+        "דסק העולם הערבי",
         "דסק החוץ",
         "מבזקן 12",
         "אסף רוזנצווייג",
