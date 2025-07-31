@@ -102,6 +102,7 @@ def clean_text(text):
         "תומר אלמגור",
         "לעדכוני הפרגוד בטלגרם",
         "t.me/hamoked_il",
+        "r0527120704@gmail.com",
         "בטלגרם",
         "חדשות המוקד",
         "@New_security8200",
