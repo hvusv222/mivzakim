@@ -81,6 +81,25 @@ def clean_text(text):
     BLOCKED_PHRASES = sorted([
         "חדשות המוקד • בטלגרם: t.me/hamoked_il",
         "בוואטסאפ: https://chat.whatsapp.com/LoxVwdYOKOAH2y2kaO8GQ7",
+        "דסק העולם הערבי,
+        "דסק החוץ",
+        "מבזקן 12",
+        "אסף רוזנצווייג",
+        "אלי הירשמן",
+        "אלעד שמחיוף",
+        "איתמר מינמר",
+        "ברק רביד",
+        "דפנה ליאל",
+        "אור רביד",
+        "ניצן שפירא",
+        "דין פישר",
+        "יעל יפה",
+        "ראש דסק 12",
+        "שושי תחוקה",
+        "קרן בצלאל",
+        "ספיר ליפקין",
+        "יולן כהן",
+        "תומר אלמגור",
         "לעדכוני הפרגוד בטלגרם",
         "t.me/hamoked_il",
         "בטלגרם",
@@ -90,6 +109,10 @@ def clean_text(text):
         "@N12chat",
         "מבזקן 12",
         "כל העדכונים בקבוצה",
+        "כל העדכונים בקבוצה:",
+        "לשליחת חומר:",
+        "בוואצפ: 0526356326",
+        "במייל",
         "לכל העדכונים, ולכתבות נוספות הצטרפו לערוץ דרך הקישור",
         "https://t.me/yediyot_bnei_brak",
         "להצטרפות מלאה לקבוצה לחצו על הצטרף",
@@ -97,7 +120,7 @@ def clean_text(text):
 
     BANNED_PHRASES = [
         "באח הגדול", "להטב", "באונס", "בגבר", "אליפות", "רוכב", "פועל", "להטבים", "להט\"ב", "להטב״ים", "להטביים",
-        "גיי", "עבירות", "קטינה", "גבר", "אירוויזיון", "אישה", "אשה בת", "קטינות", "בקטינה", "מינית", "מיניות", "מעשה מגונה"
+        "גיי", "עבירות", "קטינה", "גבר", "אירוויזיון", "אישה", "אשה בת", "קטינות", "בן גולדפריינד", "בקטינה", "מינית", "מיניות", "מעשה מגונה"
     ]
 
     for banned in BANNED_PHRASES:
@@ -167,6 +190,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     ALLOWED_LINKS = [
         "t.me/hamoked_il",
+        "https://t.me/yediyot_bnei_brak",
+        "https://chat.whatsapp.com/HRLme3RLzJX0WlaT1Fx9ol",
+        "r0527120704@gmail.com",
         "https://chat.whatsapp.com/LoxVwdYOKOAH2y2kaO8GQ7"
     ]
     if text and any(re.search(r'https?://\S+|www\.\S+', part) for part in text.split()):
