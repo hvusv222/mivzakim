@@ -1,4 +1,4 @@
-import os
+import os 
 import json
 import subprocess
 import requests
@@ -82,7 +82,7 @@ def clean_text(text):
         "חדשות המוקד • בטלגרם: t.me/hamoked_il", "בוואטסאפ: https://chat.whatsapp.com/LoxVwdYOKOAH2y2kaO8GQ7",
         "דסק העולם הערבי", "דסק החוץ", "מבזקן 12", "אסף רוזנצווייג", "אלי הירשמן", "אלעד שמחיוף",
         "איתמר מינמר", "ברק רביד", "דפנה ליאל", "ענבר טויזר", "אלמוג בוקר", "אסף רוזנצוייג", "ביטחון שוטף", "אור רביד", "ניצן שפירא", "דין פישר", "יעל יפה",
-        "ראש דסק 12", "שושי תחוקה", "לכל העדכונים:", "מה שמעניין", "בוואטסאפ ובטלגרם", "אדר גיציס", "צילום", "יובל שדה", "קרן בצלאל", "דביר ג'ברה", "ספיר ליפקין", "יולן כהן", "תומר אלמגור",
+        "ראש דסק 12", "שושי תחוקה", "לכל העדכונים:", "מה שמעניין", "בוואטסאפ ובטלגרם", "אדר גיציס", "צילום", "יובל שדה", "קרן בצלאל", "דביר ג'ברה", "ספיר ליפקין", "ידיעות בני ברק", "להצטרפות", "ישיב’ע זוכע’ר בגוגל צ’אט", "קישור לדיוח אנונימי למערכת", "סקופים מעולם הישיבות הליטאי", "יולן כהן", "תומר אלמגור",
         "לעדכוני הפרגוד בטלגרם", "t.me/hamoked_il", "r0527120704@gmail.com", "בטלגרם", "חדשות המוקד",
         "@New_security8200", "חדשות 8200 בטלגרם", "@N12chat", "מבזקן 12", "כל העדכונים בקבוצה",
         "כל העדכונים בקבוצה:", "לשליחת חומר:", "בוואצפ: 0526356326", "במייל",
@@ -93,7 +93,7 @@ def clean_text(text):
     BANNED_PHRASES = [
         "באח הגדול", "להטב", "באונס", "בגבר", "אליפות", "רוכב", "כדורגל", "כדורסל", "ספורט", "ליגה", 
         "אולימפיאדה", "מונדיאל", "זמרת", "סדרה", "קולנוע", "תיאטרון", "נטפליקס", "יוטיוב", "פורנוגרפיה", "מיניות", "יחסים", "הפלות", "זנות", "חשפנות", "סקס", "אהבה", 
-        "בגידה", "רומן", "חברה", "זוגיות", "דוגמנית", "ביקיני", "הלבשה תחתונה", "גופייה", "חשוף", "עירום", "פעוט", "ליגת", "פגיעות", "צניעות", "מעשים מגונים", "תועבה", "פועל", "להטבים", "להט\"ב", "להטב״ים", "להטביים",
+        "בגידה", "רומן", "חברה", "זוגיות", "דוגמנית", "ביקיני", "הלבשה תחתונה", "גופייה", "חשוף", "עירום", "פעוט", "ליגת", "פגיעות", "צניעות", "מעשים מגונים", "תועבה", "ליאור באקאלו", "האח הגדול", "אנס", "שחקנית", "פועל", "להטבים", "להט\"ב", "להטב״ים", "להטביים",
         "גיי", "עבירות", "קטינה", "גבר", "אירוויזיון", "אישה", "אשה בת", "קטינות", "בן גולדפריינד", "בקטינה", "מינית", "מיניות", "מעשה מגונה"
     ]
 
@@ -140,6 +140,18 @@ def convert_to_wav(input_file, output_file='output.wav'):
         output_file, '-y'
     ])
 
+def has_audio_track(file_path):
+    """בודק אם יש ערוץ שמע בקובץ וידאו"""
+    try:
+        result = subprocess.run(
+            ['ffprobe', '-i', file_path, '-show_streams', '-select_streams', 'a', '-loglevel', 'error'],
+            capture_output=True, text=True
+        )
+        return bool(result.stdout.strip())
+    except Exception as e:
+        print("⚠️ שגיאה בבדיקת ffprobe:", e)
+        return False
+
 def upload_to_ymot(wav_file_path):
     url = 'https://call2all.co.il/ym/api/UploadFile'
     with open(wav_file_path, 'rb') as f:
@@ -166,6 +178,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "t.me/hamoked_il",
         "https://t.me/yediyot_bnei_brak",
         "https://chat.whatsapp.com/HRLme3RLzJX0WlaT1Fx9ol",
+        "https://chat.whatsapp.com/J9gT1RNxAtMBzwqksTZXCJ",
+        "https://forms.gle/Pnc2FmAZuHvXXwPD7",
+        "https://bit.ly/YeshivaGroup",
         "r0527120704@gmail.com",
         "https://chat.whatsapp.com/LoxVwdYOKOAH2y2kaO8GQ7"
     ]
@@ -177,6 +192,13 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if has_video:
         video_file = await message.video.get_file()
         await video_file.download_to_drive("video.mp4")
+
+        # ✅ בדיקה אם יש ערוץ שמע
+        if not has_audio_track("video.mp4"):
+            print("⛔️ וידאו ללא שמע – לא יועלה לשלוחה.")
+            os.remove("video.mp4")
+            return
+
         convert_to_wav("video.mp4", "media.wav")
         upload_to_ymot("media.wav")
         os.remove("video.mp4")
