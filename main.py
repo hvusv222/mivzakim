@@ -152,6 +152,24 @@ def has_audio_track(file_path):
         print("⚠️ שגיאה בבדיקת ffprobe:", e)
         return False
 
+def is_audio_silent(file_path, silence_threshold=-50.0):
+    """בודק אם קובץ וידאו שקט לפי עוצמת קול ממוצעת (dB)."""
+    try:
+        result = subprocess.run(
+            ["ffmpeg", "-i", file_path, "-af", "volumedetect", "-f", "null", "NUL" if os.name == "nt" else "/dev/null"],
+            stderr=subprocess.PIPE,
+            stdout=subprocess.DEVNULL,
+            text=True
+        )
+        for line in result.stderr.splitlines():
+            if "mean_volume" in line:
+                mean_db = float(line.split(":")[-1].strip().replace(" dB", ""))
+                print(f"🔊 עוצמת קול ממוצעת: {mean_db} dB")
+                return mean_db < silence_threshold
+    except Exception as e:
+        print("⚠️ שגיאה בבדיקת עוצמת קול:", e)
+    return False
+
 def upload_to_ymot(wav_file_path):
     url = 'https://call2all.co.il/ym/api/UploadFile'
     with open(wav_file_path, 'rb') as f:
@@ -196,6 +214,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # ✅ בדיקה אם יש ערוץ שמע
         if not has_audio_track("video.mp4"):
             print("⛔️ וידאו ללא שמע – לא יועלה לשלוחה.")
+            os.remove("video.mp4")
+            return
+
+        # ✅ בדיקה אם הווליום נמוך מדי (שקט)
+        if is_audio_silent("video.mp4"):
+            print("⛔️ וידאו עם שמע שקט מדי – לא יועלה לשלוחה.")
             os.remove("video.mp4")
             return
 
