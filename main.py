@@ -100,7 +100,7 @@ def clean_text(text):
     for banned in BANNED_PHRASES:
         if banned in text:
             print(f"⛔️ הודעה מכילה מילה אסורה ('{banned}') – לא תועלה לשלוחה.")
-            return None
+            return None, f"⛔️ הודעה לא נשלחה: מכילה מילה אסורה ('{banned}')."
 
     for phrase in BLOCKED_PHRASES:
         text = text.replace(phrase, '')
@@ -108,7 +108,7 @@ def clean_text(text):
     text = re.sub(r'www\.\S+', '', text)
     text = re.sub(r'[^\w\s.,!?()\u0590-\u05FF]', '', text)
     text = re.sub(r'\s+', ' ', text).strip()
-    return text
+    return text, None
 
 def create_full_text(text):
     tz = pytz.timezone('Asia/Jerusalem')
@@ -192,6 +192,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     has_video = message.video is not None
     has_audio = message.audio is not None or message.voice is not None
 
+    async def send_error_to_channel(reason):
+        if context.bot:
+            await context.bot.send_message(chat_id=message.chat_id, text=reason)
+
     ALLOWED_LINKS = [
         "t.me/hamoked_il",
         "https://t.me/yediyot_bnei_brak",
@@ -204,22 +208,26 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
     if text and any(re.search(r'https?://\S+|www\.\S+', part) for part in text.split()):
         if not any(link in text for link in ALLOWED_LINKS):
-            print("⛔️ קישור לא מאושר – ההודעה לא תועלה לשלוחה.")
+            reason = "⛔️ הודעה לא נשלחה: קישור לא מאושר."
+            print(reason)
+            await send_error_to_channel(reason)
             return
 
     if has_video:
         video_file = await message.video.get_file()
         await video_file.download_to_drive("video.mp4")
 
-        # ✅ בדיקה אם יש ערוץ שמע
         if not has_audio_track("video.mp4"):
-            print("⛔️ וידאו ללא שמע – לא יועלה לשלוחה.")
+            reason = "⛔️ הודעה לא נשלחה: וידאו ללא שמע."
+            print(reason)
+            await send_error_to_channel(reason)
             os.remove("video.mp4")
             return
 
-        # ✅ בדיקה אם הווליום נמוך מדי (שקט)
         if is_audio_silent("video.mp4"):
-            print("⛔️ וידאו עם שמע שקט מדי – לא יועלה לשלוחה.")
+            reason = "⛔️ הודעה לא נשלחה: וידאו עם שמע שקט מדי."
+            print(reason)
+            await send_error_to_channel(reason)
             os.remove("video.mp4")
             return
 
@@ -237,15 +245,19 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         os.remove("media.wav")
 
     if text:
-        cleaned = clean_text(text)
+        cleaned, reason = clean_text(text)
         if cleaned is None:
+            if reason:
+                await send_error_to_channel(reason)
             return  # הודעה אסורה – לא ממשיכים
 
         last_messages = load_last_messages()
         for previous in last_messages:
             similarity = SequenceMatcher(None, cleaned, previous).ratio()
             if similarity >= 0.8:  # ✅ סף דמיון 80%
-                print(f"⏩ הודעה דומה מדי להודעה קודמת ({similarity*100:.1f}%) – לא תועלה לשלוחה.")
+                reason = f"⏩ הודעה דומה מדי להודעה קודמת ({similarity*100:.1f}%) – לא תועלה לשלוחה."
+                print(reason)
+                await send_error_to_channel(reason)
                 return
         last_messages.append(cleaned)
         save_last_messages(last_messages)
