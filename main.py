@@ -154,31 +154,12 @@ def has_audio_track(file_path):
         print("⚠️ שגיאה בבדיקת ffprobe:", e)
         return False
 
-def is_audio_silent(file_path, silence_threshold=-50.0):
-    """בודק אם קובץ וידאו שקט לפי עוצמת קול ממוצעת (dB)."""
-    try:
-        result = subprocess.run(
-            ["ffmpeg", "-i", file_path, "-af", "volumedetect", "-f", "null", "NUL" if os.name == "nt" else "/dev/null"],
-            stderr=subprocess.PIPE,
-            stdout=subprocess.DEVNULL,
-            text=True
-        )
-        for line in result.stderr.splitlines():
-            if "mean_volume" in line:
-                mean_db = float(line.split(":")[-1].strip().replace(" dB", ""))
-                print(f"🔊 עוצמת קול ממוצעת: {mean_db} dB")
-                return mean_db < silence_threshold
-    except Exception as e:
-        print("⚠️ שגיאה בבדיקת עוצמת קול:", e)
-    return False
-
 # ✅ תוספת: בדיקה אם קובץ WAV מכיל דיבור אנושי
 def contains_human_speech(wav_path, frame_duration=30):
     try:
         vad = webrtcvad.Vad(1)
         with wave.open(wav_path, 'rb') as wf:
             if wf.getnchannels() != 1 or wf.getsampwidth() != 2 or wf.getframerate() not in [8000, 16000]:
-                # ממיר ל־16kHz מונו 16bit
                 convert_to_wav(wav_path, 'temp.wav')
                 wf = wave.open('temp.wav', 'rb')
             frames = wf.readframes(wf.getnframes())
@@ -220,6 +201,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     has_video = message.video is not None
     has_audio = message.audio is not None or message.voice is not None
 
+    text_already_uploaded = False   # ✅ דגל חדש
+
     async def send_error_to_channel(reason):
         if context.bot:
             await context.bot.send_message(chat_id=message.chat_id, text=reason)
@@ -256,7 +239,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         convert_to_wav("video.mp4", "video.wav")
 
-        # ✅ תוספת: בדיקת דיבור אנושי
         if not contains_human_speech("video.wav"):
             reason = "⛔️ הודעה לא נשלחה: שמע אינו דיבור אנושי."
             print(reason)
@@ -265,7 +247,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             os.remove("video.wav")
             return
 
-        # ✅ שינוי: אם יש גם טקסט וגם וידאו – מאחדים
         if text:
             cleaned, reason_text = clean_text(text)
             if cleaned is None:
@@ -282,6 +263,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             os.remove("text.mp3")
             os.remove("text.wav")
             os.remove("video.wav")
+            text_already_uploaded = True   # ✅ טקסט כבר נשלח
         else:
             os.rename("video.wav", "media.wav")
 
@@ -297,17 +279,17 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         os.remove("audio.ogg")
         os.remove("media.wav")
 
-    if text:
+    if text and not text_already_uploaded:   # ✅ לא נשלח פעמיים
         cleaned, reason = clean_text(text)
         if cleaned is None:
             if reason:
                 await send_error_to_channel(reason)
-            return  # הודעה אסורה – לא ממשיכים
+            return
 
         last_messages = load_last_messages()
         for previous in last_messages:
             similarity = SequenceMatcher(None, cleaned, previous).ratio()
-            if similarity >= 0.8:  # ✅ סף דמיון 80%
+            if similarity >= 0.8:
                 reason = f"⏩ הודעה דומה מדי להודעה קודמת ({similarity*100:.1f}%) – לא תועלה לשלוחה."
                 print(reason)
                 await send_error_to_channel(reason)
