@@ -4,3 +4,4 @@ python-telegram-bot==20.0
 google-cloud-texttospeech
 pytz
 webrtcvad==2.0.10
+setuptools>=70.0.0
