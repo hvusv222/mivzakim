@@ -140,6 +140,23 @@ def convert_to_wav(input_file, output_file='output.wav'):
         output_file, '-y'
     ])
 
+# 🟢 פונקציה חדשה: חיבור טקסט+וידאו
+def concat_wav_files(file1, file2, output_file="merged.wav"):
+    tmp1 = "tmp1.wav"
+    tmp2 = "tmp2.wav"
+    subprocess.run(["ffmpeg", "-y", "-i", file1, "-ar", "8000", "-ac", "1", tmp1])
+    subprocess.run(["ffmpeg", "-y", "-i", file2, "-ar", "8000", "-ac", "1", tmp2])
+    with open("list.txt", "w", encoding="utf-8") as f:
+        f.write(f"file '{tmp1}'\n")
+        f.write(f"file '{tmp2}'\n")
+    subprocess.run([
+        "ffmpeg", "-y", "-f", "concat", "-safe", "0",
+        "-i", "list.txt", "-c", "copy", output_file
+    ])
+    os.remove(tmp1)
+    os.remove(tmp2)
+    os.remove("list.txt")
+
 def has_audio_track(file_path):
     """בודק אם יש ערוץ שמע בקובץ וידאו"""
     try:
@@ -233,10 +250,28 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             os.remove("video.mp4")
             return
 
-        convert_to_wav("video.mp4", "media.wav")
-        upload_to_ymot("media.wav")
-        os.remove("video.mp4")
-        os.remove("media.wav")
+        convert_to_wav("video.mp4", "video.wav")
+
+        if text:  # 🟢 טקסט + וידאו → חיבור
+            cleaned, reason = clean_text(text)
+            if cleaned is None:
+                if reason:
+                    await send_error_to_channel(reason)
+                os.remove("video.mp4")
+                os.remove("video.wav")
+                return
+            full_text = create_full_text(cleaned)
+            text_to_mp3(full_text, "text.mp3")
+            convert_to_wav("text.mp3", "text.wav")
+            concat_wav_files("text.wav", "video.wav", "final.wav")
+            upload_to_ymot("final.wav")
+            for f in ["video.mp4", "video.wav", "text.mp3", "text.wav", "final.wav"]:
+                if os.path.exists(f):
+                    os.remove(f)
+        else:  # רק וידאו
+            upload_to_ymot("video.wav")
+            os.remove("video.mp4")
+            os.remove("video.wav")
 
     elif has_audio:
         audio_file = await (message.audio or message.voice).get_file()
@@ -246,38 +281,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         os.remove("audio.ogg")
         os.remove("media.wav")
 
-    if text:
+    elif text:
         cleaned, reason = clean_text(text)
         if cleaned is None:
             if reason:
                 await send_error_to_channel(reason)
-            return  # הודעה אסורה – לא ממשיכים
-
-        last_messages = load_last_messages()
-        for previous in last_messages:
-            similarity = SequenceMatcher(None, cleaned, previous).ratio()
-            if similarity >= 0.8:  # ✅ סף דמיון 80%
-                reason = f"⏩ הודעה דומה מדי להודעה קודמת ({similarity*100:.1f}%) – לא תועלה לשלוחה."
-                print(reason)
-                await send_error_to_channel(reason)
-                return
-        last_messages.append(cleaned)
-        save_last_messages(last_messages)
-
-        full_text = create_full_text(cleaned)
-        text_to_mp3(full_text, "output.mp3")
-        convert_to_wav("output.mp3", "output.wav")
-        upload_to_ymot("output.wav")
-        os.remove("output.mp3")
-        os.remove("output.wav")
-
-# ♻️ keep alive
-from keep_alive import keep_alive
-keep_alive()
-
-# ▶️ הפעלת האפליקציה
-app = ApplicationBuilder().token(BOT_TOKEN).build()
-app.add_handler(MessageHandler(filters.UpdateType.CHANNEL_POST, handle_message))
-
-print("🚀 הבוט מאזין לערוץ ומעלה לשלוחה 🎧")
-app.run_polling()
+            return  # הודעה אסורה
