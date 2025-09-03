@@ -175,7 +175,7 @@ def is_audio_silent(file_path, silence_threshold=-50.0):
 # ✅ תוספת: בדיקה אם קובץ WAV מכיל דיבור אנושי
 def contains_human_speech(wav_path, frame_duration=30):
     try:
-        vad = webrtcvad.Vad(3)
+        vad = webrtcvad.Vad(1)
         with wave.open(wav_path, 'rb') as wf:
             if wf.getnchannels() != 1 or wf.getsampwidth() != 2 or wf.getframerate() not in [8000, 16000]:
                 # ממיר ל־16kHz מונו 16bit
