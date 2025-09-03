@@ -287,9 +287,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         upload_to_ymot("media.wav")
         os.remove("video.mp4")
-        convert_to_wav("video.mp4", "media.wav")
-        upload_to_ymot("media.wav")
-        os.remove("video.mp4")
         os.remove("media.wav")
 
     elif has_audio:
