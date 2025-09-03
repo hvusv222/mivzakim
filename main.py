@@ -8,6 +8,8 @@ import pytz
 import asyncio
 import re
 from difflib import SequenceMatcher  # ✅ חדש
+import wave
+import webrtcvad  # ✅ תוספת
 
 from telegram import Update
 from telegram.ext import ApplicationBuilder, MessageHandler, filters, ContextTypes
@@ -170,6 +172,32 @@ def is_audio_silent(file_path, silence_threshold=-50.0):
         print("⚠️ שגיאה בבדיקת עוצמת קול:", e)
     return False
 
+# ✅ תוספת: בדיקה אם קובץ WAV מכיל דיבור אנושי
+def contains_human_speech(wav_path, frame_duration=30):
+    try:
+        vad = webrtcvad.Vad(3)
+        with wave.open(wav_path, 'rb') as wf:
+            if wf.getnchannels() != 1 or wf.getsampwidth() != 2 or wf.getframerate() not in [8000, 16000]:
+                # ממיר ל־16kHz מונו 16bit
+                convert_to_wav(wav_path, 'temp.wav')
+                wf = wave.open('temp.wav', 'rb')
+            frames = wf.readframes(wf.getnframes())
+            frame_size = int(wf.getframerate() * frame_duration / 1000) * 2
+            speech_detected = False
+            for i in range(0, len(frames), frame_size):
+                frame = frames[i:i+frame_size]
+                if len(frame) < frame_size:
+                    break
+                if vad.is_speech(frame, wf.getframerate()):
+                    speech_detected = True
+                    break
+            if os.path.exists('temp.wav'):
+                os.remove('temp.wav')
+            return speech_detected
+    except Exception as e:
+        print("⚠️ שגיאה בבדיקת דיבור אנושי:", e)
+        return False
+
 def upload_to_ymot(wav_file_path):
     url = 'https://call2all.co.il/ym/api/UploadFile'
     with open(wav_file_path, 'rb') as f:
@@ -226,13 +254,39 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             os.remove("video.mp4")
             return
 
-        if is_audio_silent("video.mp4"):
-            reason = "⛔️ הודעה לא נשלחה: וידאו עם שמע שקט מדי."
+        convert_to_wav("video.mp4", "video.wav")
+
+        # ✅ תוספת: בדיקת דיבור אנושי
+        if not contains_human_speech("video.wav"):
+            reason = "⛔️ הודעה לא נשלחה: שמע אינו דיבור אנושי."
             print(reason)
             await send_error_to_channel(reason)
             os.remove("video.mp4")
+            os.remove("video.wav")
             return
 
+        # ✅ שינוי: אם יש גם טקסט וגם וידאו – מאחדים
+        if text:
+            cleaned, reason_text = clean_text(text)
+            if cleaned is None:
+                if reason_text:
+                    await send_error_to_channel(reason_text)
+                os.remove("video.mp4")
+                os.remove("video.wav")
+                return
+            full_text = create_full_text(cleaned)
+            text_to_mp3(full_text, "text.mp3")
+            convert_to_wav("text.mp3", "text.wav")
+            subprocess.run(['ffmpeg', '-i', 'text.wav', '-i', 'video.wav', '-filter_complex',
+                            '[0:a][1:a]concat=n=2:v=0:a=1[out]', '-map', '[out]', 'media.wav', '-y'])
+            os.remove("text.mp3")
+            os.remove("text.wav")
+            os.remove("video.wav")
+        else:
+            os.rename("video.wav", "media.wav")
+
+        upload_to_ymot("media.wav")
+        os.remove("video.mp4")
         convert_to_wav("video.mp4", "media.wav")
         upload_to_ymot("media.wav")
         os.remove("video.mp4")
