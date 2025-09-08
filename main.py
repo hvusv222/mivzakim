@@ -83,7 +83,7 @@ def clean_text(text):
     BLOCKED_PHRASES = sorted([
         "חדשות המוקד • בטלגרם: t.me/hamoked_il", "בוואטסאפ: https://chat.whatsapp.com/LoxVwdYOKOAH2y2kaO8GQ7",
         "דסק העולם הערבי", "לשיתוף", "לכל העדכונים ~ ראשוני", "סקופים", "צאפ מגזין", "בוואטצאפ", "מצטרפים בקישור", "דסק החוץ", "מבזקן 12", "אסף רוזנצווייג", "אלי הירשמן", "אלעד שמחיוף",
-        "איתמר מינמר", "צפו", "ללא צנזורה חדשות ישראל", "לקבוצת הוואטסאפ לעדכונים חריגים", "https://chat.whatsapp.com/B5sAtMyYFlCJCX0eR99g1M", "ברק רביד", "דפנה ליאל", "ענבר טויזר", "אלמוג בוקר", "בWhatsApp", "אסף רוזנצוייג", "ביטחון שוטף", "טלגרם", "ניצן שפירא", "דין פישר", "יעל יפה",
+        "איתמר מינמר", "צפו", "כדי להגיב לכתבה לחצו כאן", "ללא צנזורה חדשות ישראל", "לקבוצת הוואטסאפ לעדכונים חריגים", "https://chat.whatsapp.com/B5sAtMyYFlCJCX0eR99g1M", "ברק רביד", "דפנה ליאל", "ענבר טויזר", "אלמוג בוקר", "בWhatsApp", "אסף רוזנצוייג", "ביטחון שוטף", "טלגרם", "ניצן שפירא", "דין פישר", "יעל יפה",
         "ראש דסק 12", "שושי תחוקה", "לכל העדכונים:", "מה שמעניין", "בוואטסאפ ובטלגרם", "אדר גיציס", "צילום", "יובל שדה", "קרן בצלאל", "דביר ג'ברה", "ספיר ליפקין", "ידיעות בני ברק", "להצטרפות", "ישיב’ע זוכע’ר בגוגל צ’אט", "קישור לדיוח אנונימי למערכת", "לכל העדכונים", "נועם כהן", "המַקְרן - רק וידאו", "להצטרפות", "הכי חם ברשת - ’הערינג’", "וואטצפ", "לשליחת חומרים", "053-315-3081", "סקופים מעולם הישיבות הליטאי", "יולן כהן", "תומר אלמגור",
         "לעדכוני הפרגוד בטלגרם", "t.me/hamoked_il", "r0527120704@gmail.com", "בטלגרם", "חדשות המוקד",
         "@New_security8200", "חדשות 8200 בטלגרם", "@N12chat", "מבזקן 12", "כל העדכונים בקבוצה",
@@ -212,13 +212,13 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "https://t.me/yediyot_bnei_brak",
         "https://chat.whatsapp.com/HRLme3RLzJX0WlaT1Fx9ol",
         "https://chat.whatsapp.com/J9gT1RNxAtMBzwqksTZXCJ",
+        "https://chat.whatsapp.com/B5sAtMyYFlCJCX0eR99g1M",
         "https://forms.gle/Pnc2FmAZuHvXXwPD7",
         "https://t.me/News_il_h",
         "https://chat.whatsapp.com/EGTE1vTzkVKGdj3YXUSs5I",
         "https://chat.whatsapp.com/Ca6SOTOwzvY8dBcx78f3cA?mode=ems_share_c",
         "https://t.me/GbmMDm",
         "https://chat.whatsapp.com/IXZNWCRmFUl13WkNucOlby?mode=ac_t",
-        "https://chat.whatsapp.com/B5sAtMyYFlCJCX0eR99g1M",
         "https://bit.ly/YeshivaGroup",
         "r0527120704@gmail.com",
         "https://chat.whatsapp.com/LoxVwdYOKOAH2y2kaO8GQ7"
@@ -293,7 +293,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         last_messages = load_last_messages()
         for previous in last_messages:
             similarity = SequenceMatcher(None, cleaned, previous).ratio()
-            if similarity >= 0.8:
+            if similarity >= 0.7:
                 reason = f"⏩ הודעה דומה מדי להודעה קודמת ({similarity*100:.1f}%) – לא תועלה לשלוחה."
                 print(reason)
                 await send_error_to_channel(reason)
