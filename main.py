@@ -318,4 +318,5 @@ app = ApplicationBuilder().token(BOT_TOKEN).build()
 app.add_handler(MessageHandler(filters.UpdateType.CHANNEL_POST, handle_message))
 
 print("🚀 הבוט מאזין לערוץ ומעלה לשלוחה 🎧")
-app.run_polling()
+app.run_polling(poll_interval=3.0)
+
