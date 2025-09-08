@@ -212,6 +212,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "https://t.me/yediyot_bnei_brak",
         "https://chat.whatsapp.com/HRLme3RLzJX0WlaT1Fx9ol",
         "https://chat.whatsapp.com/J9gT1RNxAtMBzwqksTZXCJ",
+        "https://chat.whatsapp.com/FaX7KJEml4031fWuhoMHwZ",
         "https://chat.whatsapp.com/B5sAtMyYFlCJCX0eR99g1M",
         "https://forms.gle/Pnc2FmAZuHvXXwPD7",
         "https://t.me/News_il_h",
