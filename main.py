@@ -318,6 +318,15 @@ app = ApplicationBuilder().token(BOT_TOKEN).build()
 app.add_handler(MessageHandler(filters.UpdateType.CHANNEL_POST, handle_message))
 
 print("🚀 הבוט מאזין לערוץ ומעלה לשלוחה 🎧")
-app.run_polling(poll_interval=3.0, timeout=35)
+# ▶️ הפעלת הבוט עם טיפול ב-TimedOut
+try:
+    app.run_polling(
+        poll_interval=2.0,   # כל כמה שניות לבדוק הודעות חדשות
+        timeout=30,          # כמה זמן לחכות לפני שנזרקת שגיאת TimedOut
+        allowed_updates=Update.ALL_TYPES  # לוודא שכל סוגי ההודעות נתפסים
+    )
+except Exception as e:
+    print("❌ שגיאה כללית בהרצת הבוט:", e)
+
 
 
