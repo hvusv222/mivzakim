@@ -10,6 +10,7 @@ import re
 from difflib import SequenceMatcher  # ✅ חדש
 import wave
 import webrtcvad  # ✅ תוספת
+import time
 
 from telegram import Update
 from telegram.ext import ApplicationBuilder, MessageHandler, filters, ContextTypes
@@ -17,7 +18,7 @@ from google.cloud import texttospeech
 
 # 📁 קובץ לשמירת היסטוריית הודעות
 LAST_MESSAGES_FILE = "last_messages.json"
-MAX_HISTORY = 15  # ✅ שונה מ־10 ל־15
+MAX_HISTORY = 16  # ✅ שונה מ־10 ל־16
 
 def load_last_messages():
     if not os.path.exists(LAST_MESSAGES_FILE):
@@ -294,7 +295,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         last_messages = load_last_messages()
         for previous in last_messages:
             similarity = SequenceMatcher(None, cleaned, previous).ratio()
-            if similarity >= 0.7:
+            if similarity >= 0.6:
                 reason = f"⏩ הודעה דומה מדי להודעה קודמת ({similarity*100:.1f}%) – לא תועלה לשלוחה."
                 print(reason)
                 await send_error_to_channel(reason)
@@ -313,20 +314,24 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 from keep_alive import keep_alive
 keep_alive()
 
-# ▶️ הפעלת האפליקציה
+# ▶️ הפעלת הבוט
 app = ApplicationBuilder().token(BOT_TOKEN).build()
 app.add_handler(MessageHandler(filters.UpdateType.CHANNEL_POST, handle_message))
 
 print("🚀 הבוט מאזין לערוץ ומעלה לשלוחה 🎧")
-# ▶️ הפעלת הבוט עם טיפול ב-TimedOut
-try:
-    app.run_polling(
-        poll_interval=2.0,   # כל כמה שניות לבדוק הודעות חדשות
-        timeout=30,          # כמה זמן לחכות לפני שנזרקת שגיאת TimedOut
-        allowed_updates=Update.ALL_TYPES  # לוודא שכל סוגי ההודעות נתפסים
-    )
-except Exception as e:
-    print("❌ שגיאה כללית בהרצת הבוט:", e)
+
+# ▶️ לולאת הרצה אינסופית
+while True:
+    try:
+        app.run_polling(
+            poll_interval=2.0,   # כל כמה שניות לבדוק הודעות חדשות
+            timeout=30,          # כמה זמן לחכות לפני שנזרקת שגיאת TimedOut
+            allowed_updates=Update.ALL_TYPES  # לוודא שכל סוגי ההודעות נתפסים
+        )
+    except Exception as e:
+        print("❌ שגיאה כללית בהרצת הבוט:", e)
+        time.sleep(5)  # לחכות 5 שניות ואז להפעיל מחדש את הבוט
+
 
 
 
