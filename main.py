@@ -295,7 +295,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         last_messages = load_last_messages()
         for previous in last_messages:
             similarity = SequenceMatcher(None, cleaned, previous).ratio()
-            if similarity >= 0.6:
+            if similarity >= 0.4:
                 reason = f"⏩ הודעה דומה מדי להודעה קודמת ({similarity*100:.1f}%) – לא תועלה לשלוחה."
                 print(reason)
                 await send_error_to_channel(reason)
