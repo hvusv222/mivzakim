@@ -198,17 +198,41 @@ def contains_human_speech(wav_path, frame_duration=30):
 
 def upload_to_ymot(wav_file_path):
     url = 'https://call2all.co.il/ym/api/UploadFile'
-    with open(wav_file_path, 'rb') as f:
-        files = {'file': (os.path.basename(wav_file_path), f, 'audio/wav')}
-        data = {
-            'token': YMOT_TOKEN,
-            'path': YMOT_PATH,
-            'convertAudio': '1',
-            'autoNumbering': 'true'
-        }
-        response = requests.post(url, data=data, files=files)
-    print("📞 תגובת ימות:", response.text)
+    for i in range(5):
+        try:
+            with open(wav_file_path, 'rb') as f:
+                files = {'file': (os.path.basename(wav_file_path), f, 'audio/wav')}
+                data = {
+                    'token': YMOT_TOKEN,
+                    'path': YMOT_PATH,
+                    'convertAudio': '1',
+                    'autoNumbering': 'true'
+                }
+                response = requests.post(url, data=data, files=files, timeout=60)
+            print("📞 תגובת ימות:", response.text)
+            return response.text
+        except Exception as e:
+            wait_time = 2 ** i + random.uniform(0, 1)
+            print(f"⚠️ שגיאה בהעלאה ({e}). ניסיון נוסף בעוד {wait_time:.1f} שניות...")
+            time.sleep(wait_time)
 
+# ✅ ✅ ✅ פונקציה חדשה – מוקדם יותר בקוד
+async def safe_send(bot, chat_id, text):
+    """שולח הודעה לטלגרם עם טיפול ב-429"""
+    for i in range(5):  # עד 5 ניסיונות
+        try:
+            await bot.send_message(chat_id=chat_id, text=text)
+            return
+        except Exception as e:
+            if "429" in str(e):
+                wait_time = 2 ** i + random.uniform(0, 1)  # backoff
+                print(f"⚠️ נחסמתי זמנית (429). מחכה {wait_time:.1f} שניות...")
+                await asyncio.sleep(wait_time)
+            else:
+                print(f"⚠️ שגיאה בשליחת הודעה לטלגרם: {e}")
+                return
+
+# ⬇️ ⬇️ עכשיו אפשר להשתמש בה כאן בתוך handle_message ⬇️ ⬇️
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = update.channel_post
     if not message:
