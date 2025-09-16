@@ -361,6 +361,9 @@ app.add_handler(MessageHandler(filters.UpdateType.CHANNEL_POST, handle_message))
 
 print("🚀 הבוט מאזין לערוץ ומעלה לשלוחה 🎧")
 
+import telegram
+telegram.Bot(BOT_TOKEN).delete_webhook()
+
 # ▶️ לולאת הרצה אינסופית
 while True:
     try:
