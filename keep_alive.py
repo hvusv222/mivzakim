@@ -3,7 +3,7 @@ from threading import Thread
 
 app = Flask('')
 
-@app.route('/health')
+@app.route('/health')  # חשוב! זה הנתיב ש-Render מחפש
 def health():
     return "OK", 200
 
