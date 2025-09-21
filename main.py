@@ -11,6 +11,7 @@ from difflib import SequenceMatcher  # ✅ חדש
 import wave
 import webrtcvad  # ✅ תוספת
 import time
+import requests
 
 from telegram import Update
 from telegram.ext import ApplicationBuilder, MessageHandler, filters, ContextTypes
@@ -360,6 +361,7 @@ app = ApplicationBuilder().token(BOT_TOKEN).build()
 app.add_handler(MessageHandler(filters.UpdateType.CHANNEL_POST, handle_message))
 
 print("🚀 הבוט מאזין לערוץ ומעלה לשלוחה 🎧")
+print("🌍 My public IP is:", requests.get("https://api.ipify.org").text)
 
 import telegram
 telegram.Bot(BOT_TOKEN).delete_webhook()
