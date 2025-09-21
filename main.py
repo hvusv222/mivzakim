@@ -11,8 +11,6 @@ from difflib import SequenceMatcher  # ✅ חדש
 import wave
 import webrtcvad  # ✅ תוספת
 import time
-import requests
-from telegram import Bot
 
 from telegram import Update
 from telegram.ext import ApplicationBuilder, MessageHandler, filters, ContextTypes
@@ -352,13 +350,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         upload_to_ymot("output.wav")
         os.remove("output.mp3")
         os.remove("output.wav")
-
-def notify_ip():
-    public_ip = requests.get("https://api.ipify.org").text
-    print("🌍 My public IP is:", public_ip)  # עדיין משאיר ללוג
-    bot = Bot(token=BOT_TOKEN)
-    chat_id = os.getenv("ADMIN_CHAT_ID")  # תגדיר פעם אחת בקובץ env
-    bot.send_message(chat_id=chat_id, text=f"🌍 ה־IP הציבורי של השרת: {public_ip}")
     
 # ♻️ keep alive
 from keep_alive import keep_alive
@@ -369,10 +360,9 @@ app = ApplicationBuilder().token(BOT_TOKEN).build()
 app.add_handler(MessageHandler(filters.UpdateType.CHANNEL_POST, handle_message))
 
 print("🚀 הבוט מאזין לערוץ ומעלה לשלוחה 🎧")
-notify_ip()
 
-import telegram, asyncio
-asyncio.run(telegram.Bot(BOT_TOKEN).delete_webhook())
+import telegram
+telegram.Bot(BOT_TOKEN).delete_webhook()
 
 # ▶️ לולאת הרצה אינסופית
 while True:
