@@ -81,6 +81,12 @@ def num_to_hebrew_words(hour, minute):
     return f"{hours_map[hour_12]} {minutes_map[minute]}"
 
 def clean_text(text):
+    add_moked_credit = False
+
+    # בדיקה אם ההודעה מתחילה במילים 'חדשות המוקד'
+    if text.strip().startswith("חדשות המוקד"):
+        add_moked_credit = True
+
     BLOCKED_PHRASES = sorted([
         "חדשות המוקד • בטלגרם: t.me/hamoked_il", "בוואטסאפ: https://chat.whatsapp.com/LoxVwdYOKOAH2y2kaO8GQ7",
         "דסק העולם הערבי", "לשיתוף", "לכל העדכונים ~ ראשוני", "סקופים", "צאפ מגזין", "בוואטצאפ", "מצטרפים בקישור", "דסק החוץ", "מבזקן 12", "אסף רוזנצווייג", "אלי הירשמן", "אלעד שמחיוף",
@@ -126,6 +132,10 @@ def clean_text(text):
     text = re.sub(r'www\.\S+', '', text)
     text = re.sub(r'[^\w\s.,!?()\u0590-\u05FF]', '', text)
     text = re.sub(r'\s+', ' ', text).strip()
+
+        # ✅ הוספת קרדיט אם התחיל ב'חדשות המוקד'
+    if add_moked_credit:
+        text += "המוקד"
 
     return text, None
 
