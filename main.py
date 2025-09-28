@@ -135,7 +135,7 @@ def clean_text(text):
 
         # ✅ הוספת קרדיט אם התחיל ב'חדשות המוקד'
     if add_moked_credit:
-        text += "המוקד"
+        text += ", המוקד"
 
     return text, None
 
