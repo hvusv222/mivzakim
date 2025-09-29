@@ -251,8 +251,7 @@ def is_shabbat_or_yom_tov():
         res = requests.get(url)
         data = res.json()
 
-        now = datetime.now(pytz.timezone("Asia/Jerusalem"))
-        now = datetime(2025, 10, 4, 18, 30, tzinfo=pytz.timezone("Asia/Jerusalem"))  # 🧪 מצב בדיקה: שבת בערב
+        now = pytz.timezone("Asia/Jerusalem").localize(datetime(2025, 10, 4, 18, 30))  # 🧪 מצב בדיקה
         candle_time = None
         havdala_time = None
         start_time = None
