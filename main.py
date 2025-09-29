@@ -245,6 +245,8 @@ async def safe_send(bot, chat_id, text):
 # ✅ תוספת – פונקציה שבודקת אם עכשיו שבת או חג
 def is_shabbat_or_yom_tov():
     try:
+        from datetime import datetime, timedelta
+        
         url = "https://www.hebcal.com/shabbat?cfg=json&geonameid=293397&m=50"  # ירושלים
         res = requests.get(url)
         data = res.json()
