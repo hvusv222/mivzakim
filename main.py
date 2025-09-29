@@ -245,11 +245,19 @@ async def safe_send(bot, chat_id, text):
 # ✅ תוספת – פונקציה שבודקת אם עכשיו שבת או חג
 def is_shabbat_or_yom_tov():
     try:
+        # 🧪 בדיקה – שים True כדי לדמות שבת
+        TEST_MODE = True
+        if TEST_MODE:
+            # נניח שבת: 4 באוקטובר 2025 בשעה 19:00
+            now = datetime(2025, 10, 4, 19, 0, tzinfo=pytz.timezone("Asia/Jerusalem"))
+        else:
+            now = datetime.now(pytz.timezone("Asia/Jerusalem"))
+
+        # ✅ שורה שהיית חסרה – הבאת זמני השבת מה-API
         url = "https://www.hebcal.com/shabbat?cfg=json&geonameid=293397&m=50"  # ירושלים
         res = requests.get(url)
         data = res.json()
 
-        now = datetime.now(pytz.timezone("Asia/Jerusalem"))
         candle_time = None
         havdala_time = None
         start_time = None
@@ -259,26 +267,27 @@ def is_shabbat_or_yom_tov():
             if item['category'] == 'candles':
                 candle_time = datetime.fromisoformat(item['date']).astimezone(pytz.timezone("Asia/Jerusalem"))
             elif item['category'] == 'havdalah':
-                # ✅ תוספת – זמן צאת שבת לפי 55 דקות מהדלקת נרות
+                # ✅ צאת שבת מותאם אישית – 55 דקות מהדלקת נרות
                 havdala_time = candle_time + timedelta(minutes=55)
             elif item['category'] == 'holiday' and 'starts' in item['title'].lower():
                 start_time = datetime.fromisoformat(item['date']).astimezone(pytz.timezone("Asia/Jerusalem"))
             elif item['category'] == 'holiday' and 'ends' in item['title'].lower():
                 end_time = datetime.fromisoformat(item['date']).astimezone(pytz.timezone("Asia/Jerusalem")) + timedelta(minutes=5)
 
-        # ✅ תוספת – בדיקה לשבת
+        # ✅ בדיקת שבת
         if candle_time and havdala_time:
             if candle_time <= now <= havdala_time:
                 print("📵 שבת – לא שולח לשלוחה.")
                 return True
 
-        # ✅ תוספת – בדיקה לחג
+        # ✅ בדיקת חג
         if start_time and end_time:
             if start_time <= now <= end_time:
                 print("📵 חג – לא שולח לשלוחה.")
                 return True
 
         return False
+
     except Exception as e:
         print("⚠️ שגיאה בבדיקת זמן שבת/חג:", e)
         return False
