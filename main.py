@@ -252,6 +252,7 @@ def is_shabbat_or_yom_tov():
         data = res.json()
 
         now = datetime.now(pytz.timezone("Asia/Jerusalem"))
+        now = datetime(2025, 10, 4, 18, 30, tzinfo=pytz.timezone("Asia/Jerusalem"))  # 🧪 מצב בדיקה: שבת בערב
         candle_time = None
         havdala_time = None
         start_time = None
