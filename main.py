@@ -3,7 +3,7 @@ import json
 import subprocess
 import requests
 import base64
-from datetime import datetime
+import datetime
 import pytz
 import asyncio
 import re
@@ -251,7 +251,7 @@ def is_shabbat_or_yom_tov():
             # נניח שבת: 4 באוקטובר 2025 בשעה 19:00
             now = datetime(2025, 10, 4, 19, 0, tzinfo=pytz.timezone("Asia/Jerusalem"))
         else:
-            now = datetime.now(pytz.timezone("Asia/Jerusalem"))
+            now = datetime.datetime(2025, 10, 4, 19, 0, tzinfo=pytz.timezone("Asia/Jerusalem"))
 
         # ✅ שורה שהיית חסרה – הבאת זמני השבת מה-API
         url = "https://www.hebcal.com/shabbat?cfg=json&geonameid=293397&m=50"  # ירושלים
