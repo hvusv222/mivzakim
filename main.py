@@ -11,6 +11,7 @@ from difflib import SequenceMatcher  # ✅ חדש
 import wave
 import webrtcvad  # ✅ תוספת
 import time
+from telegram.ext import filters
 
 from telegram import Update
 from telegram.ext import ApplicationBuilder, MessageHandler, filters, ContextTypes
@@ -416,7 +417,7 @@ keep_alive()
 
 # ▶️ הפעלת הבוט
 app = ApplicationBuilder().token(BOT_TOKEN).build()
-app.add_handler(MessageHandler(filters.UpdateType.CHANNEL_POST, handle_message))
+app.add_handler(MessageHandler(filters.ChatType.CHANNEL, handle_message))
 
 print("🚀 הבוט מאזין לערוץ ומעלה לשלוחה 🎧")
 
