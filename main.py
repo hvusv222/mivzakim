@@ -243,13 +243,9 @@ async def safe_send(bot, chat_id, text):
                 print(f"⚠️ שגיאה בשליחת הודעה לטלגרם: {e}")
                 return
 
-# ✅ תוספת – פונקציה שבודקת אם עכשיו שבת או חג
-async def is_shabbat_or_yom_tov(force_test=False):
+# ✅ פונקציה שבודקת אם עכשיו שבת או חג
+async def is_shabbat_or_yom_tov():
     try:
-        if force_test:
-            print("🧪 מצב בדיקה: מדמה שבת/חג – חוזר True")
-            return True
-
         url = "https://www.hebcal.com/zmanim?cfg=json&im=1&geonameid=293397"
         res = await asyncio.to_thread(requests.get, url, timeout=10)
         data = res.json()
@@ -265,7 +261,6 @@ async def is_shabbat_or_yom_tov(force_test=False):
         print(f"⚠️ שגיאה בבדיקת שבת/חג: {e}")
         return False
 
-       
 # ⬇️ ⬇️ עכשיו אפשר להשתמש בה כאן בתוך handle_message ⬇️ ⬇️
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = update.channel_post
@@ -273,7 +268,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     # ✅ תוספת – עצירה אוטומטית בשבתות וחגים
-    if await is_shabbat_or_yom_tov(force_test=True):  # שים לב ל-AWAIT פה
+    if await is_shabbat_or_yom_tov():
         print("📵 שבת/חג – דילוג על ההודעה")
         return
 
