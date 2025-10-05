@@ -244,49 +244,28 @@ async def safe_send(bot, chat_id, text):
                 return
 
 # ✅ תוספת – פונקציה שבודקת אם עכשיו שבת או חג
-def is_shabbat_or_yom_tov():
+def is_shabbat_or_yom_tov(force_test=False):
     try:
-                
-        url = "https://www.hebcal.com/shabbat?cfg=json&geonameid=293397&m=50"  # ירושלים
-        res = requests.get(url)
+        if force_test:
+            print("🧪 מצב בדיקה: מדמה שבת/חג – חוזר True")
+            return True
+
+        # ירושלים (geonameid = 293397)
+        url = "https://www.hebcal.com/zmanim?cfg=json&im=1&geonameid=293397"
+        res = requests.get(url, timeout=10)
         data = res.json()
-        
-        now = datetime.now(pytz.timezone("Asia/Jerusalem"))
-        print(f"⌛ בדיקת זמן שבת/חג - עכשיו: {now}")
 
-        candle_time = None
-        havdala_time = None
-        start_time = None
-        end_time = None
+        is_assur = data.get("status", {}).get("isAssurBemlacha", False)
+        local_time = data.get("status", {}).get("localTime", "לא ידוע")
 
-        for item in data['items']:
-            if item['category'] == 'candles':
-                candle_time = datetime.fromisoformat(item['date']).astimezone(pytz.timezone("Asia/Jerusalem"))
-            elif item['category'] == 'havdalah':
-                # ✅ תוספת – זמן צאת שבת לפי 50 דקות מהדלקת נרות
-                havdala_time = candle_time + timedelta(minutes=42)
-            elif item['category'] == 'holiday' and 'starts' in item['title'].lower():
-                start_time = datetime.fromisoformat(item['date']).astimezone(pytz.timezone("Asia/Jerusalem"))
-            elif item['category'] == 'holiday' and 'ends' in item['title'].lower():
-                end_time = datetime.fromisoformat(item['date']).astimezone(pytz.timezone("Asia/Jerusalem")) + timedelta(minutes=5)
+        print(f"⌛ בדיקת שבת/חג - עכשיו (זמן מקומי): {local_time}")
+        print(f"🔍 האם עכשיו אסור במלאכה? {'✅ כן' if is_assur else '❌ לא'}")
 
-        # ✅ תוספת – בדיקה לשבת
-        if candle_time and havdala_time:
-            if candle_time <= now <= havdala_time:
-                print("📵 שבת – לא שולח לשלוחה.")
-                return True
-
-        # ✅ תוספת – בדיקה לחג
-        if start_time and end_time:
-            if start_time <= now <= end_time:
-                print("📵 חג – לא שולח לשלוחה.")
-                return True
-
-        return False
+        return is_assur
     except Exception as e:
-        print("⚠️ שגיאה בבדיקת זמן שבת/חג:", e)
+        print(f"⚠️ שגיאה בבדיקת שבת/חג: {e}")
         return False
-
+       
 # ⬇️ ⬇️ עכשיו אפשר להשתמש בה כאן בתוך handle_message ⬇️ ⬇️
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = update.channel_post
