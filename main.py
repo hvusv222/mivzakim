@@ -244,15 +244,14 @@ async def safe_send(bot, chat_id, text):
                 return
 
 # ✅ תוספת – פונקציה שבודקת אם עכשיו שבת או חג
-def is_shabbat_or_yom_tov(force_test=False):
+async def is_shabbat_or_yom_tov(force_test=False):
     try:
         if force_test:
             print("🧪 מצב בדיקה: מדמה שבת/חג – חוזר True")
             return True
 
-        # ירושלים (geonameid = 293397)
         url = "https://www.hebcal.com/zmanim?cfg=json&im=1&geonameid=293397"
-        res = requests.get(url, timeout=10)
+        res = await asyncio.to_thread(requests.get, url, timeout=10)
         data = res.json()
 
         is_assur = data.get("status", {}).get("isAssurBemlacha", False)
