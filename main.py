@@ -264,6 +264,7 @@ async def is_shabbat_or_yom_tov(force_test=False):
     except Exception as e:
         print(f"⚠️ שגיאה בבדיקת שבת/חג: {e}")
         return False
+
        
 # ⬇️ ⬇️ עכשיו אפשר להשתמש בה כאן בתוך handle_message ⬇️ ⬇️
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -272,9 +273,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     # ✅ תוספת – עצירה אוטומטית בשבתות וחגים
-if await is_shabbat_or_yom_tov(force_test=True):
-    print("📵 שבת/חג – דילוג על ההודעה")
-    return
+    if await is_shabbat_or_yom_tov(force_test=True):  # שים לב ל-AWAIT פה
+        print("📵 שבת/חג – דילוג על ההודעה")
+        return
 
     text = message.text or message.caption
     has_video = message.video is not None
