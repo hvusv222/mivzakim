@@ -272,9 +272,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     # ✅ תוספת – עצירה אוטומטית בשבתות וחגים
-    if is_shabbat_or_yom_tov():
-        print("📵 שבת/חג – דילוג על ההודעה")
-        return
+if await is_shabbat_or_yom_tov(force_test=True):
+    print("📵 שבת/חג – דילוג על ההודעה")
+    return
 
     text = message.text or message.caption
     has_video = message.video is not None
