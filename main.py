@@ -433,6 +433,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # 🧑‍💻 פקודת /list_filters: הצגת כל הרשימות
 async def list_filters_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
+    print(f"DEBUG: נשלחה פקודה /list_filters מ- User ID: {user_id}") # DEBUG PRINT
+    
+    if not ADMIN_USER_ID: # ✅ בדיקה מפורשת של משתנה סביבה חסר
+        await update.message.reply_text("❌ שגיאה: משתנה הסביבה ADMIN_USER_ID אינו מוגדר. לא ניתן לבצע פעולות ניהול.")
+        return
+
     if not is_admin(user_id):
         await update.message.reply_text("❌ אין לך הרשאה לבצע פעולה זו.")
         return
@@ -459,6 +465,12 @@ async def list_filters_command(update: Update, context: ContextTypes.DEFAULT_TYP
 # ➕ פקודת /add_filter: הוספת פריט
 async def add_filter_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
+    print(f"DEBUG: נשלחה פקודה /add_filter מ- User ID: {user_id}") # DEBUG PRINT
+    
+    if not ADMIN_USER_ID: # ✅ בדיקה מפורשת של משתנה סביבה חסר
+        await update.message.reply_text("❌ שגיאה: משתנה הסביבה ADMIN_USER_ID אינו מוגדר. לא ניתן לבצע פעולות ניהול.")
+        return
+
     if not is_admin(user_id):
         await update.message.reply_text("❌ אין לך הרשאה לבצע פעולה זו.")
         return
@@ -505,6 +517,12 @@ async def add_filter_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
 # ➖ פקודת /remove_filter: הסרת פריט
 async def remove_filter_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
+    print(f"DEBUG: נשלחה פקודה /remove_filter מ- User ID: {user_id}") # DEBUG PRINT
+    
+    if not ADMIN_USER_ID: # ✅ בדיקה מפורשת של משתנה סביבה חסר
+        await update.message.reply_text("❌ שגיאה: משתנה הסביבה ADMIN_USER_ID אינו מוגדר. לא ניתן לבצע פעולות ניהול.")
+        return
+        
     if not is_admin(user_id):
         await update.message.reply_text("❌ אין לך הרשאה לבצע פעולה זו.")
         return
