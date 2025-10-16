@@ -12,10 +12,120 @@ import wave
 import webrtcvad  # ✅ תוספת
 import time
 from telegram.ext import filters
-
 from telegram import Update
-from telegram.ext import ApplicationBuilder, MessageHandler, filters, ContextTypes
+from telegram.ext import ApplicationBuilder, MessageHandler, CommandHandler, filters, ContextTypes
+import logging
+import random
 from google.cloud import texttospeech
+
+# 🟢 מזהה המנהל (ה-telegram user id שלך)
+ADMIN_ID = 7820835795
+
+# 🔧 הגדרת לוגים
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
+
+# 🟣 קובץ הסינון
+FILTERS_FILE = "filters_config.json"
+
+# מילים ברירת מחדל במקרה שאין קובץ
+DEFAULT_FILTERS = {
+    "STRICT_BANNED": ["טיקטוק", "OnlyFans", "פורנו"],
+    "WORD_BANNED": ["חזה", "מחשוף", "נשיקה"]
+}
+
+
+# 📂 טעינת מילים אסורות מקובץ או ברירת מחדל
+def load_filters():
+    if os.path.exists(FILTERS_FILE):
+        with open(FILTERS_FILE, "r", encoding="utf-8") as f:
+            try:
+                return json.load(f)
+            except json.JSONDecodeError:
+                logging.warning("שגיאת JSON — נטען מילים ברירת מחדל")
+                return DEFAULT_FILTERS
+    else:
+        save_filters(DEFAULT_FILTERS)
+        return DEFAULT_FILTERS
+
+
+# 💾 שמירת מילים אסורות לקובץ
+def save_filters(filters_data):
+    with open(FILTERS_FILE, "w", encoding="utf-8") as f:
+        json.dump(filters_data, f, ensure_ascii=False, indent=2)
+
+
+# 🧹 פונקציה שמנקה טקסט לפי המילים האסורות
+def clean_text(text, filters_data):
+    for word in filters_data["STRICT_BANNED"]:
+        if word in text:
+            return None  # חסום לחלוטין
+    for word in filters_data["WORD_BANNED"]:
+        text = text.replace(word, "*" * len(word))
+    return text
+
+
+# 🧭 פקודת ניהול מילים
+async def manage_filters(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    if user_id != ADMIN_ID:
+        await update.message.reply_text("⛔ אין לך הרשאה לפקודה זו.")
+        return
+
+    args = context.args
+    if len(args) < 2:
+        await update.message.reply_text("❗ שימוש: /filter [STRICT_BANNED|WORD_BANNED] [add|remove|list] [מילה]")
+        return
+
+    category = args[0].upper()
+    action = args[1].lower()
+    filters_data = load_filters()
+
+    if category not in filters_data:
+        await update.message.reply_text("⚠️ קטגוריה לא קיימת. השתמש ב: STRICT_BANNED או WORD_BANNED")
+        return
+
+    if action == "list":
+        words = ", ".join(filters_data[category]) or "אין מילים"
+        await update.message.reply_text(f"📜 רשימת {category}:\n{words}")
+        return
+
+    if len(args) < 3:
+        await update.message.reply_text("❗ חובה לציין מילה לאחר add/remove")
+        return
+
+    word = args[2]
+
+    if action == "add":
+        if word in filters_data[category]:
+            await update.message.reply_text("⚠️ המילה כבר קיימת ברשימה.")
+        else:
+            filters_data[category].append(word)
+            save_filters(filters_data)
+            await update.message.reply_text(f"✅ נוספה '{word}' לרשימת {category}.")
+
+    elif action == "remove":
+        if word not in filters_data[category]:
+            await update.message.reply_text("⚠️ המילה לא קיימת ברשימה.")
+        else:
+            filters_data[category].remove(word)
+            save_filters(filters_data)
+            await update.message.reply_text(f"🗑️ הוסרה '{word}' מרשימת {category}.")
+    else:
+        await update.message.reply_text("❗ פעולה לא מוכרת. השתמש ב-add/remove/list.")
+
+    filters_data = load_filters()
+
+    text = update.channel_post.caption or update.channel_post.text or ""
+    cleaned = clean_text(text, filters_data)
+
+    if cleaned is None:
+        logging.info("🚫 הודעה נחסמה עקב מילה אסורה (STRICT_BANNED)")
+        return
+
+    logging.info(f"✅ הודעה נקייה: {cleaned[:50]}")
 
 # 📁 קובץ לשמירת היסטוריית הודעות
 LAST_MESSAGES_FILE = "last_messages.json"
@@ -81,35 +191,13 @@ def num_to_hebrew_words(hour, minute):
     hour_12 = hour % 12 or 12
     return f"{hours_map[hour_12]} {minutes_map[minute]}"
 
-def clean_text(text):
-    add_moked_credit = False
-
-    # בדיקה אם ההודעה מתחילה במילים 'חדשות המוקד'
-    if text.strip().startswith("חדשות המוקד"):
-        add_moked_credit = True
-
-    BLOCKED_PHRASES = sorted([
-        "חדשות המוקד • בטלגרם: t.me/hamoked_il", "בוואטסאפ: https://chat.whatsapp.com/LoxVwdYOKOAH2y2kaO8GQ7",
-        "דסק העולם הערבי", "לשיתוף", "לכל העדכונים ~ ראשוני", "סקופים", "צאפ מגזין", "בוואטצאפ", "מצטרפים בקישור", "דסק החוץ", "מבזקן 12", "אסף רוזנצווייג", "אלי הירשמן", "אלעד שמחיוף",
-        "איתמר מינמר", "צפו>", "כדי להגיב לכתבה לחצו כאן", "חדשות לפני כולם", "לפני כולם", "לפרסום", "ללא צנזורה חדשות ישראל", "#", "גאנם איברהים", "053-419-0216", "לקבוצת הוואטסאפ לעדכונים חריגים", "https://chat.whatsapp.com/B5sAtMyYFlCJCX0eR99g1M", "ברק רביד", "דפנה ליאל", "ענבר טויזר", "אלמוג בוקר", "בWhatsApp", "אסף רוזנצוייג", "טלגרם", "ניצן שפירא", "דין פישר", "יעל יפה",
-        "ראש דסק 12", "שושי תחוקה", "לכל העדכונים:", "מה שמעניין", "בוואטסאפ ובטלגרם", "אדר גיציס", "צילום", "יובל שדה", "קרן בצלאל", "דביר ג'ברה", "ספיר ליפקין", "ידיעות בני ברק", "להצטרפות", "ישיב’ע זוכע’ר בגוגל צ’אט", "קישור לדיוח אנונימי למערכת", "לכל העדכונים", "נועם כהן", "המַקְרן - רק וידאו", "להצטרפות", "הכי חם ברשת - ’הערינג’", "וואטצפ", "לשליחת חומרים", "053-315-3081", "0527637624", "סקופים מעולם הישיבות הליטאי", "לקריאה נוחה במחשב", "לקריאה נוחה בנייד", "לקריאת נוחה בנייד", "יולן כהן", "תומר אלמגור",
-        "לעדכוני הפרגוד בטלגרם", "t.me/hamoked_il", "r0527120704@gmail.com", "בטלגרם", "חדשות המוקד",
-        "@New_security8200", "חדשות 8200 בטלגרם", "@N12chat", "מבזקן 12", "כל העדכונים בקבוצה",
-        "כל העדכונים בקבוצה:", "לשליחת חומר:", "בוואצפ: 0526356326", "במייל",
-        "לכל העדכונים, ולכתבות נוספות הצטרפו לערוץ דרך הקישור",
-        "https://t.me/yediyot_bnei_brak", "להצטרפות מלאה לקבוצה לחצו על הצטרף"
-    ], key=len, reverse=True)
-
-    STRICT_BANNED = [
-        "באח הגדול", "להטב", "שתפו והצטרפו לקהילת העדכונים", "באונס", "בגבר", "אליפות", "רוכב", "כדורגל", "כדורסל", "ספורט", "ליגה", 
-        "אולימפיאדה", "מונדיאל", "זמרת", "סדרה", "קולנוע", "תיאטרון", "נטפליקס", "יוטיוב", "פורנוגרפיה", "מיניות", "קיום יחסים", "אור רביד", "נועם כהן", "אונס", "הכרויות", "וממהרים לבוא", "עד שלא ראיתי", "כוכבת", "ספוטיפיי", "דוגמנית", "טיקטוק", "מערכת יחסים", "ביטחון שוטף", "שחקן", "בן זוג", "בת זוג", "גרוש", "סרט", "דוגמן", "הפלות", "זנות", "חשפנות", "סקס", "אהבה", 
-        "בגידה", "רומן", "זוגיות", "דוגמנית", "ביקיני", "הלבשה תחתונה", "גופייה", "חשוף", "עירום", "פעוט", "ליגת", "צניעות", "מעשים מגונים", "תועבה", "ליאור באקאלו", "הגאווה", "האח הגדול", "זמר", "גידי גוב", "עמית אטיאס", "גרוש", "בת זוג", "הומו", "בן זוג", "לאנוס",  "אנס", "הטרדה", "זונה", "שחקנית", "להטבים", "להט\"ב", "להטב״ים", "להטביים",
-        "פסטיבל", "קטינה", "טרנס", "אירוויזיון", "אישה", "אשה בת", "קטינות", "בן גולדפריינד", "בקטינה", "מינית", "מיניות", "מעשה מגונה"
-    ]
-
-    # ⭕ מילות בודדות בלבד - חוסמות רק אם הן מילה שלמה
-    WORD_BANNED = [
-        "גבר", "מין", "פרס", "חזה", "בחזה", "החזה", "לחזה", "גולגולת", "סמים", "קנאביס", "בפרס", "גיי", "רצח את", "הרצח", "תיעוד", "המין", "במין", "עבירות", "בעבירות"
+def clean_text(text, filters_data):
+    for word in filters_data["STRICT_BANNED"]:
+        if word in text:
+            return None  # חסום לחלוטין
+    for word in filters_data["WORD_BANNED"]:
+        text = text.replace(word, "*" * len(word))
+    return text
     ]
 
     # --- בדיקה ---
