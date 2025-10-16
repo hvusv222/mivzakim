@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 import pytz
 import asyncio
 import re
-from difflib import SequenceMatcher  # ✅ חדש
+from difflib import SequenceMatcher  # חדש
 import wave
 import webrtcvad  # ✅ תוספת
 import time
