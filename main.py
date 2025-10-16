@@ -7,20 +7,20 @@ from datetime import datetime, timedelta
 import pytz
 import asyncio
 import re
-from difflib import SequenceMatcher 
+from difflib import SequenceMatcher
 import wave
-import webrtcvad 
+import webrtcvad
 import time
 import random
 from telegram.ext import filters
 
 from telegram import Update
-from telegram.ext import ApplicationBuilder, MessageHandler, filters, ContextTypes, CommandHandler 
+from telegram.ext import ApplicationBuilder, MessageHandler, filters, ContextTypes, CommandHandler
 from google.cloud import texttospeech
 
 # 📁 קובץ לשמירת היסטוריית הודעות
 LAST_MESSAGES_FILE = "last_messages.json"
-MAX_HISTORY = 16 
+MAX_HISTORY = 16
 
 # 📁 קובץ הגדרות סינון
 FILTERS_FILE = "filters.json"
@@ -28,6 +28,10 @@ BLOCKED_PHRASES = []
 STRICT_BANNED = []
 WORD_BANNED = []
 ALLOWED_LINKS = []
+
+# ✅ חדש: ביטוי רגולרי לזיהוי מספרי טלפון
+# דוגמאות למה שנתפס: 050-1234567, 03 1234567, 1700-123456
+PHONE_NUMBER_REGEX = re.compile(r'\b(0\d{1,2}[-\s]?\d{7}|1[5-9]00[-\s]?\d{6}|05\d[-\s]?\d{7})\b')
 
 # ✅ חדש: מיפוי שמות פשוטים למפתחות JSON
 FILTER_MAPPING = {
@@ -67,7 +71,7 @@ def load_filters():
             "ALLOWED_LINKS": []
         }
         with open(FILTERS_FILE, "w", encoding="utf-8") as f:
-            json.dump(data, ensure_ascii=False, indent=4)
+            json.dump(data, f, ensure_ascii=False, indent=4)
 
     try:
         with open(FILTERS_FILE, "r", encoding="utf-8") as f:
@@ -170,9 +174,15 @@ def clean_text(text):
     # בדיקה אם ההודעה מתחילה במילים 'חדשות המוקד'
     if text.strip().startswith("חדשות המוקד"):
         add_moked_credit = True
+        
+    # --- ✅ בדיקה ראשונה: האם יש מספר טלפון? ---
+    global PHONE_NUMBER_REGEX
+    if PHONE_NUMBER_REGEX.search(text):
+        print("⛔️ הודעה מכילה מספר טלפון – לא תועלה לשלוחה.")
+        return None, "⛔️ הודעה לא נשלחה: מכילה מספר טלפון."
 
     # --- בדיקה עם רשימות הסינון הנטענות ---
-    global STRICT_BANNED, WORD_BANNED, BLOCKED_PHRASES 
+    global STRICT_BANNED, WORD_BANNED, BLOCKED_PHRASES # שימוש ברשימות הגלובליות
 
     # קבוצה ראשונה – מחפשים בכל מקום (STRICT_BANNED)
     for banned in STRICT_BANNED:
@@ -193,30 +203,11 @@ def clean_text(text):
     text = re.sub(r'https?://\S+', '', text)
     text = re.sub(r'www\.\S+', '', text)
     text = re.sub(r'[^\w\s.,!?()\u0590-\u05FF]', '', text)
-    
-    # ⚠️ חשוב: ניקוי הרווחים והפסיקים לפני הוספת הקרדיט
     text = re.sub(r'\s+', ' ', text).strip()
-    
-    # ✅ שינוי: הוספת קרדיט בצורה חכמה יותר
+
+    # ✅ הוספת קרדיט אם התחיל ב'חדשות המוקד'
     if add_moked_credit:
-        if not text:
-            # אם הטקסט נמחק לחלוטין (כמו במקרה של 'חדשות המוקד' בלבד)
-            text = "המוקד" 
-        else:
-            # אם נשאר טקסט כלשהו, נוסיף פסיק ורווח
-            text += ", המוקד"
-
-    # ⚠️ ניקוי סופי של פסיקים ורווחים מובילים שיכלו להיווצר
-    text = text.strip()
-    while text.startswith(','):
-        text = text[1:].strip()
-
-    # ******************** ✅ התיקון הקריטי החדש ********************
-    if not text:
-        reason = "⛔️ הודעה לא נשלחה: הטקסט המקורי נוקה לחלוטין עקב ביטויים חסומים."
-        print(reason)
-        return None, reason
-    # *****************************************************************
+        text += ", המוקד"
 
     return text, None
 
@@ -710,7 +701,7 @@ app.add_handler(MessageHandler(filters.ChatType.CHANNEL, handle_message))
 app.add_handler(CommandHandler("list_filters", list_filters_command, filters=filters.ChatType.PRIVATE))
 app.add_handler(CommandHandler("add_filter", add_filter_command, filters=filters.ChatType.PRIVATE))
 app.add_handler(CommandHandler("remove_filter", remove_filter_command, filters=filters.ChatType.PRIVATE))
-app.add_handler(CommandHandler("view_filter", view_filter_command, filters=filters.ChatType.PRIVATE)) # ✅ הפקודה החדשה!
+app.add_handler(CommandHandler("view_filter", view_filter_command, filters=filters.ChatType.PRIVATE))
 
 print("🚀 הבוט מאזין לערוץ ומעלה לשלוחה 🎧")
 
