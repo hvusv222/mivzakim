@@ -198,8 +198,7 @@ def clean_text(text, filters_data):
     for word in filters_data["WORD_BANNED"]:
         text = text.replace(word, "*" * len(word))
     return text
-    ]
-
+    
     # --- בדיקה ---
     # קבוצה ראשונה – מחפשים בכל מקום
     for banned in STRICT_BANNED:
