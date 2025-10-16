@@ -269,6 +269,7 @@ def contains_human_speech(wav_path, frame_duration=30):
         print("⚠️ שגיאה בבדיקת דיבור אנושי:", e)
         return False
 
+# ⚠️ הפונקציה עודכנה ללוג מפורט יותר!
 def upload_to_ymot(wav_file_path):
     url = 'https://call2all.coil/ym/api/UploadFile'
     for i in range(5):
@@ -281,13 +282,34 @@ def upload_to_ymot(wav_file_path):
                     'convertAudio': '1',
                     'autoNumbering': 'true'
                 }
+                
                 response = requests.post(url, data=data, files=files, timeout=60)
-            print("📞 תגובת ימות:", response.text)
-            return response.text
+                
+                # --- ✅ בדיקות לוג חדשות ---
+                response.raise_for_status() # זורק שגיאה עבור 4xx/5xx
+                
+                print(f"📞 תגובת ימות: סטטוס {response.status_code}, תוכן: {response.text}")
+                
+                # בדיקה אם התוכן מכיל הודעת שגיאה ידועה
+                if "error" in response.text.lower() or "שגיאה" in response.text:
+                    raise Exception(f"תגובת שגיאה מימות המשיח: {response.text}")
+                    
+                return response.text
+                
+        except requests.exceptions.RequestException as req_e:
+            # ללכוד שגיאות רשת, timeout, או סטטוס קוד רע (מ-raise_for_status)
+            wait_time = 2 ** i + random.uniform(0, 1)
+            print(f"⚠️ שגיאה בחיבור או סטטוס (HTTP {getattr(req_e.response, 'status_code', 'N/A')}): {req_e}. ניסיון נוסף בעוד {wait_time:.1f} שניות...")
+            time.sleep(wait_time)
         except Exception as e:
+            # ללכוד שגיאות אחרות (כמו הודעת שגיאה מפורשת בגוף התגובה)
             wait_time = 2 ** i + random.uniform(0, 1)
             print(f"⚠️ שגיאה בהעלאה ({e}). ניסיון נוסף בעוד {wait_time:.1f} שניות...")
             time.sleep(wait_time)
+            
+    # אם כל הניסיונות נכשלו
+    return "❌ נכשלה העלאה לימות המשיח לאחר מספר ניסיונות."
+
 
 # ✅ ✅ ✅ פונקציה חדשה – מוקדם יותר בקוד
 async def safe_send(bot, chat_id, text):
@@ -342,7 +364,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     async def send_error_to_channel(reason):
         if context.bot:
-            await context.bot.send_message(chat_id=message.chat_id, text=reason)
+            # שימוש ב-safe_send
+            await safe_send(context.bot, message.chat_id, reason) 
 
     global ALLOWED_LINKS # שימוש ברשימה הגלובלית שנטענה
     if text and any(re.search(r'https?://\S+|www\.\S+', part) for part in text.split()):
