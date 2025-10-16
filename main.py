@@ -270,7 +270,7 @@ def contains_human_speech(wav_path, frame_duration=30):
         return False
 
 def upload_to_ymot(wav_file_path):
-    url = 'https://call2all.co.il/ym/api/UploadFile'
+    url = 'https://call2all.coil/ym/api/UploadFile'
     for i in range(5):
         try:
             with open(wav_file_path, 'rb') as f:
@@ -430,6 +430,18 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         os.remove("output.mp3")
         os.remove("output.wav")
 
+# 🛠️ פונקציה לבריחת תווים מיוחדים (Markdown V1)
+def escape_markdown_v1(text):
+    """
+    Escapes special characters (*, _, `, [) for Telegram's Markdown V1 parsing 
+    to prevent BadRequest errors when displaying user-defined filter items.
+    """
+    text = text.replace('*', '\\*')
+    text = text.replace('_', '\\_')
+    text = text.replace('`', '\\`')
+    text = text.replace('[', '\\[')
+    return text
+
 # 🧑‍💻 פקודת /list_filters: הצגת כל הרשימות
 async def list_filters_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
@@ -454,8 +466,9 @@ async def list_filters_command(update: Update, context: ContextTypes.DEFAULT_TYP
         items = current_data.get(json_key, [])
         response += f"*{friendly_name}* (`{json_key}`): ({len(items)} פריטים)\n"
         if items:
-            # מציג עד 5 פריטים ראשונים
-            response += "  " + "\n  ".join(items[:5])
+            # ✅ בריחת תווים מיוחדים בפריטי הסינון לפני הצגה
+            escaped_items = [escape_markdown_v1(item) for item in items[:5]]
+            response += "  " + "\n  ".join(escaped_items)
             if len(items) > 5:
                 response += f"\n  ... ועוד {len(items) - 5} פריטים."
         response += "\n\n"
@@ -509,7 +522,9 @@ async def add_filter_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
     if save_filters(current_data):
         # טעינה מחדש של הגלובליות כדי שהבוט יתחיל להשתמש בהן מיד
         load_filters() 
-        await update.message.reply_text(f"✅ הפריט '{item_to_add}' נוסף לרשימה *{list_name}* בהצלחה!", parse_mode="Markdown")
+        # ✅ בריחה בתוך הודעת האישור
+        escaped_item = escape_markdown_v1(item_to_add)
+        await update.message.reply_text(f"✅ הפריט '{escaped_item}' נוסף לרשימה *{list_name}* בהצלחה!", parse_mode="Markdown")
     else:
         await update.message.reply_text("❌ שגיאה בשמירת הקובץ. הפריט לא נוסף.")
 
@@ -561,7 +576,9 @@ async def remove_filter_command(update: Update, context: ContextTypes.DEFAULT_TY
     if save_filters(current_data):
         # טעינה מחדש של הגלובליות כדי שהבוט יתחיל להשתמש בהן מיד
         load_filters() 
-        await update.message.reply_text(f"✅ הפריט '{item_to_remove}' הוסר מהרשימה *{list_name}* בהצלחה!", parse_mode="Markdown")
+        # ✅ בריחה בתוך הודעת האישור
+        escaped_item = escape_markdown_v1(item_to_remove)
+        await update.message.reply_text(f"✅ הפריט '{escaped_item}' הוסר מהרשימה *{list_name}* בהצלחה!", parse_mode="Markdown")
     else:
         await update.message.reply_text("❌ שגיאה בשמירת הקובץ. הפריט לא הוסר.")
     
