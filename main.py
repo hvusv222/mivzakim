@@ -67,7 +67,7 @@ def load_filters():
             "ALLOWED_LINKS": []
         }
         with open(FILTERS_FILE, "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False, indent=4)
+            json.dump(data, ensure_ascii=False, indent=4)
 
     try:
         with open(FILTERS_FILE, "r", encoding="utf-8") as f:
@@ -271,7 +271,8 @@ def contains_human_speech(wav_path, frame_duration=30):
 
 # ⚠️ הפונקציה עודכנה ללוג מפורט יותר!
 def upload_to_ymot(wav_file_path):
-    url = 'https://call2all.coil/ym/api/UploadFile'
+    # ✅ ✅ ✅ התיקון הקריטי כאן: הוספנו את הנקודה הדרושה (.co.il)
+    url = 'https://call2all.co.il/ym/api/UploadFile' 
     for i in range(5):
         try:
             with open(wav_file_path, 'rb') as f:
