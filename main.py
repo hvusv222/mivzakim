@@ -7,9 +7,9 @@ from datetime import datetime, timedelta
 import pytz
 import asyncio
 import re
-from difflib import SequenceMatcher
+from difflib import SequenceMatcher  # ✅ חדש
 import wave
-import webrtcvad
+import webrtcvad  # ✅ תוספת
 import time
 import random
 from telegram.ext import filters
@@ -20,7 +20,7 @@ from google.cloud import texttospeech
 
 # 📁 קובץ לשמירת היסטוריית הודעות
 LAST_MESSAGES_FILE = "last_messages.json"
-MAX_HISTORY = 16
+MAX_HISTORY = 16  # ✅ שונה מ־10 ל־16
 
 # 📁 קובץ הגדרות סינון
 FILTERS_FILE = "filters.json"
