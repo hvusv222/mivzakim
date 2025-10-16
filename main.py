@@ -497,7 +497,80 @@ async def list_filters_command(update: Update, context: ContextTypes.DEFAULT_TYP
                 response += f"\n  ... ועוד {len(items) - 5} פריטים."
         response += "\n\n"
 
+    # ✅ הוספת טיפ לפקודה החדשה
+    response += "_לצפייה ברשימה מלאה, השתמש ב־_`/view_filter <שם_רשימה>`\n"
+
     await update.message.reply_text(response, parse_mode="Markdown")
+
+# 🔍 פקודת /view_filter: הצגת כל הפריטים ברשימה ספציפית
+async def view_filter_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+
+    if not ADMIN_USER_ID: 
+        await update.message.reply_text("❌ שגיאה: משתנה הסביבה ADMIN_USER_ID אינו מוגדר. לא ניתן לבצע פעולות ניהול.")
+        return
+
+    if not is_admin(user_id):
+        await update.message.reply_text("❌ אין לך הרשאה לבצע פעולה זו.")
+        return
+
+    # מצפה לפורמט: /view_filter <list_name>
+    if len(context.args) != 1:
+        names = ", ".join(FILTER_MAPPING.keys())
+        await update.message.reply_text(f"⚠️ שימוש: /view_filter <{names}>. (הרשימות: {names})")
+        return
+
+    list_name = context.args[0]
+    if list_name not in FILTER_MAPPING:
+        names = ", ".join(FILTER_MAPPING.keys())
+        await update.message.reply_text(f"❌ שם רשימה לא קיים. הרשימות הזמינות: {names}")
+        return
+
+    json_key = FILTER_MAPPING[list_name]
+    current_data = load_filters()
+    if not current_data:
+        await update.message.reply_text("⚠️ שגיאה בטעינת קובץ הסינון.")
+        return
+
+    items = current_data.get(json_key, [])
+    
+    if not items:
+        await update.message.reply_text(f"✅ הרשימה *{list_name}* ריקה.", parse_mode="Markdown")
+        return
+        
+    header = f"📜 *כל הפריטים ברשימה {list_name}* ({len(items)} פריטים):\n\n"
+    
+    # עוטף את הפריטים במספור ובריחה
+    list_content = "\n".join([f"{i+1}. {escape_markdown_v1(item)}" for i, item in enumerate(items)])
+    
+    full_message = header + list_content
+
+    # פיצול הודעה אם היא ארוכה מדי (מעל 4000 תווים)
+    MAX_TELEGRAM_LENGTH = 4000
+    if len(full_message) > MAX_TELEGRAM_LENGTH:
+        messages = []
+        # מתחיל עם הכותרת כדי שכל חלק יהיה קריא
+        current_part = header
+        
+        # פיצול לפי שורות
+        for line in list_content.split('\n'):
+            # אם הוספת השורה הבאה תגרום לחריגה מהמגבלה
+            if len(current_part) + len(line) + 1 > MAX_TELEGRAM_LENGTH:
+                messages.append(current_part)
+                # מתחיל חלק חדש עם כותרת דומה
+                current_part = header.replace("כל הפריטים", "המשך הפריטים") + line
+            else:
+                current_part += "\n" + line
+        messages.append(current_part) # הוספת החלק האחרון
+
+        for msg in messages:
+            # שימוש ב-safe_send כדי למנוע חסימה
+            await safe_send(context.bot, update.effective_chat.id, msg)
+            await asyncio.sleep(0.5) # מניעת 429
+            
+    else:
+        await update.message.reply_text(full_message, parse_mode="Markdown")
+
 
 # ➕ פקודת /add_filter: הוספת פריט
 async def add_filter_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -618,6 +691,7 @@ app.add_handler(MessageHandler(filters.ChatType.CHANNEL, handle_message))
 app.add_handler(CommandHandler("list_filters", list_filters_command, filters=filters.ChatType.PRIVATE))
 app.add_handler(CommandHandler("add_filter", add_filter_command, filters=filters.ChatType.PRIVATE))
 app.add_handler(CommandHandler("remove_filter", remove_filter_command, filters=filters.ChatType.PRIVATE))
+app.add_handler(CommandHandler("view_filter", view_filter_command, filters=filters.ChatType.PRIVATE)) # ✅ הפקודה החדשה!
 
 print("🚀 הבוט מאזין לערוץ ומעלה לשלוחה 🎧")
 
