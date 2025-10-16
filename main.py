@@ -15,7 +15,7 @@ import random
 from telegram.ext import filters
 
 from telegram import Update
-from telegram.ext import ApplicationBuilder, MessageHandler, filters, ContextTypes
+from telegram.ext import ApplicationBuilder, MessageHandler, filters, ContextTypes, CommandHandler # ✅ הוספנו CommandHandler
 from google.cloud import texttospeech
 
 # 📁 קובץ לשמירת היסטוריית הודעות
@@ -28,6 +28,14 @@ BLOCKED_PHRASES = []
 STRICT_BANNED = []
 WORD_BANNED = []
 ALLOWED_LINKS = []
+
+# ✅ חדש: מיפוי שמות פשוטים למפתחות JSON
+FILTER_MAPPING = {
+    "ניקוי": "BLOCKED_PHRASES",
+    "איסור-חזק": "STRICT_BANNED",
+    "איסור-מילה": "WORD_BANNED",
+    "קישורים": "ALLOWED_LINKS"
+}
 
 def load_last_messages():
     if not os.path.exists(LAST_MESSAGES_FILE):
@@ -47,14 +55,25 @@ def save_last_messages(messages):
     except Exception as e:
         print(f"⚠️ שגיאה בשמירת היסטוריית הודעות: {e}")
 
-# ⚙️ פונקציה חדשה: טעינת רשימות הסינון
+# ⚙️ פונקציה לטעינת הגדרות הסינון
 def load_filters():
     global BLOCKED_PHRASES, STRICT_BANNED, WORD_BANNED, ALLOWED_LINKS
     if not os.path.exists(FILTERS_FILE):
-        raise FileNotFoundError(f"❌ קובץ הגדרות סינון לא נמצא: {FILTERS_FILE}")
+        # יצירת קובץ ברירת מחדל אם אינו קיים
+        data = {
+            "BLOCKED_PHRASES": [],
+            "STRICT_BANNED": [],
+            "WORD_BANNED": [],
+            "ALLOWED_LINKS": []
+        }
+        with open(FILTERS_FILE, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=4)
+
     try:
         with open(FILTERS_FILE, "r", encoding="utf-8") as f:
             data = json.load(f)
+        
+        # עדכון הרשימות הגלובליות
         # רשימות שנמחקו/מנוקות (יש למיין לפי אורך)
         BLOCKED_PHRASES = sorted(data.get("BLOCKED_PHRASES", []), key=len, reverse=True)
         # מילים וביטויים שפוסלים לחלוטין (מופיעים בחלקן)
@@ -63,9 +82,23 @@ def load_filters():
         WORD_BANNED = data.get("WORD_BANNED", [])
         # קישורים מותרים
         ALLOWED_LINKS = data.get("ALLOWED_LINKS", [])
+        
         print(f"✅ נטענו בהצלחה {len(BLOCKED_PHRASES)} ביטויי ניקוי, {len(STRICT_BANNED)} ביטויים פוסלים, {len(WORD_BANNED)} מילים פוסלות ו- {len(ALLOWED_LINKS)} קישורים מותרים.")
+        return data
     except Exception as e:
-        raise Exception("❌ נכשל בטעינת קובץ הגדרות סינון: " + str(e))
+        print(f"❌ נכשל בטעינת קובץ הגדרות סינון: {e}")
+        return None
+
+# ✅ חדש: פונקציה לשמירת הגדרות הסינון
+def save_filters(data):
+    try:
+        with open(FILTERS_FILE, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=4)
+        print("✅ הגדרות הסינון נשמרו בהצלחה.")
+        return True
+    except Exception as e:
+        print(f"❌ שגיאה בשמירת הגדרות סינון: {e}")
+        return False
 
 # 🟡 כתיבת קובץ מפתח Google מ־BASE64
 key_b64 = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS_B64")
@@ -79,18 +112,29 @@ try:
 except Exception as e:
     raise Exception("❌ נכשל בכתיבת קובץ JSON מ־BASE64: " + str(e))
 
-# 🛠 משתנים מ־Render
+# 🛠 משתנים מ־Render וחדשים
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 YMOT_TOKEN = os.getenv("YMOT_TOKEN")
 YMOT_PATH = os.getenv("YMOT_PATH", "ivr2:90/")
+# ✅ חדש: מזהה משתמש אדמין לשליטה בפילטרים
+ADMIN_USER_ID = os.getenv("ADMIN_USER_ID") # מומלץ להגדיר כמשתנה סביבה!
 
 # טוען את הפילטרים מיד לאחר הגדרת המשתנים הגלובליים
 try:
-    load_filters()
+    filter_data = load_filters()
 except Exception as e:
     print(e)
     # אפשרות להמשיך עם רשימות ריקות אם הטעינה נכשלה, או לזרוק את השגיאה
-    pass 
+    pass
+
+# 🔒 פונקציה לבדיקת הרשאת אדמין
+def is_admin(user_id):
+    if not ADMIN_USER_ID:
+        # אם אין ADMIN_USER_ID מוגדר, אף אחד לא אדמין
+        return False
+    # בדיקה אם המשתמש הוא האדמין המוגדר (ADMIN_USER_ID הוא סטרינג)
+    return str(user_id) == ADMIN_USER_ID
+
 # 🔢 המרת מספרים לעברית
 def num_to_hebrew_words(hour, minute):
     hours_map = {
@@ -385,6 +429,123 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         upload_to_ymot("output.wav")
         os.remove("output.mp3")
         os.remove("output.wav")
+
+# 🧑‍💻 פקודת /list_filters: הצגת כל הרשימות
+async def list_filters_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    if not is_admin(user_id):
+        await update.message.reply_text("❌ אין לך הרשאה לבצע פעולה זו.")
+        return
+
+    # טעינה מחדש של הנתונים העדכניים לפני הצגה
+    current_data = load_filters()
+    if not current_data:
+        await update.message.reply_text("⚠️ שגיאה בטעינת קובץ הסינון.")
+        return
+
+    response = "📜 *רשימות סינון פעילות* 📜\n\n"
+    for friendly_name, json_key in FILTER_MAPPING.items():
+        items = current_data.get(json_key, [])
+        response += f"*{friendly_name}* (`{json_key}`): ({len(items)} פריטים)\n"
+        if items:
+            # מציג עד 5 פריטים ראשונים
+            response += "  " + "\n  ".join(items[:5])
+            if len(items) > 5:
+                response += f"\n  ... ועוד {len(items) - 5} פריטים."
+        response += "\n\n"
+
+    await update.message.reply_text(response, parse_mode="Markdown")
+
+# ➕ פקודת /add_filter: הוספת פריט
+async def add_filter_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    if not is_admin(user_id):
+        await update.message.reply_text("❌ אין לך הרשאה לבצע פעולה זו.")
+        return
+
+    # מצפה לפורמט: /add_filter <list_name> <item>
+    if len(context.args) < 2:
+        names = ", ".join(FILTER_MAPPING.keys())
+        await update.message.reply_text(f"⚠️ שימוש: /add_filter <{names}> <הפריט>")
+        return
+
+    list_name = context.args[0]
+    item_to_add = " ".join(context.args[1:])
+
+    if list_name not in FILTER_MAPPING:
+        names = ", ".join(FILTER_MAPPING.keys())
+        await update.message.reply_text(f"❌ שם רשימה לא קיים. הרשימות הזמינות: {names}")
+        return
+
+    json_key = FILTER_MAPPING[list_name]
+    
+    current_data = load_filters()
+    if not current_data:
+        await update.message.reply_text("⚠️ שגיאה בטעינת קובץ הסינון.")
+        return
+
+    # הוספת הפריט
+    items = current_data.get(json_key, [])
+    if item_to_add in items:
+        await update.message.reply_text(f"ℹ️ הפריט '{item_to_add}' כבר קיים ברשימה {list_name}.")
+        return
+
+    items.append(item_to_add)
+    current_data[json_key] = items
+
+    # שמירה ועדכון גלובלי
+    if save_filters(current_data):
+        # טעינה מחדש של הגלובליות כדי שהבוט יתחיל להשתמש בהן מיד
+        load_filters() 
+        await update.message.reply_text(f"✅ הפריט '{item_to_add}' נוסף לרשימה *{list_name}* בהצלחה!", parse_mode="Markdown")
+    else:
+        await update.message.reply_text("❌ שגיאה בשמירת הקובץ. הפריט לא נוסף.")
+
+
+# ➖ פקודת /remove_filter: הסרת פריט
+async def remove_filter_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    if not is_admin(user_id):
+        await update.message.reply_text("❌ אין לך הרשאה לבצע פעולה זו.")
+        return
+
+    # מצפה לפורמט: /remove_filter <list_name> <item>
+    if len(context.args) < 2:
+        names = ", ".join(FILTER_MAPPING.keys())
+        await update.message.reply_text(f"⚠️ שימוש: /remove_filter <{names}> <הפריט>")
+        return
+
+    list_name = context.args[0]
+    item_to_remove = " ".join(context.args[1:])
+
+    if list_name not in FILTER_MAPPING:
+        names = ", ".join(FILTER_MAPPING.keys())
+        await update.message.reply_text(f"❌ שם רשימה לא קיים. הרשימות הזמינות: {names}")
+        return
+
+    json_key = FILTER_MAPPING[list_name]
+    
+    current_data = load_filters()
+    if not current_data:
+        await update.message.reply_text("⚠️ שגיאה בטעינת קובץ הסינון.")
+        return
+
+    # הסרת הפריט
+    items = current_data.get(json_key, [])
+    if item_to_remove not in items:
+        await update.message.reply_text(f"ℹ️ הפריט '{item_to_remove}' לא נמצא ברשימה {list_name}.")
+        return
+
+    items.remove(item_to_remove)
+    current_data[json_key] = items
+
+    # שמירה ועדכון גלובלי
+    if save_filters(current_data):
+        # טעינה מחדש של הגלובליות כדי שהבוט יתחיל להשתמש בהן מיד
+        load_filters() 
+        await update.message.reply_text(f"✅ הפריט '{item_to_remove}' הוסר מהרשימה *{list_name}* בהצלחה!", parse_mode="Markdown")
+    else:
+        await update.message.reply_text("❌ שגיאה בשמירת הקובץ. הפריט לא הוסר.")
     
 # ♻️ keep alive
 from keep_alive import keep_alive
@@ -393,6 +554,11 @@ keep_alive()
 # ▶️ הפעלת הבוט
 app = ApplicationBuilder().token(BOT_TOKEN).build()
 app.add_handler(MessageHandler(filters.ChatType.CHANNEL, handle_message))
+
+# ✅ הוספת CommandHandler לניהול הפילטרים בצ'אט פרטי עם האדמין
+app.add_handler(CommandHandler("list_filters", list_filters_command, filters=filters.ChatType.PRIVATE))
+app.add_handler(CommandHandler("add_filter", add_filter_command, filters=filters.ChatType.PRIVATE))
+app.add_handler(CommandHandler("remove_filter", remove_filter_command, filters=filters.ChatType.PRIVATE))
 
 print("🚀 הבוט מאזין לערוץ ומעלה לשלוחה 🎧")
 
