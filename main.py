@@ -7,20 +7,20 @@ from datetime import datetime, timedelta
 import pytz
 import asyncio
 import re
-from difflib import SequenceMatcher # ✅ חדש
+from difflib import SequenceMatcher 
 import wave
-import webrtcvad # ✅ תוספת
+import webrtcvad 
 import time
 import random
 from telegram.ext import filters
 
 from telegram import Update
-from telegram.ext import ApplicationBuilder, MessageHandler, filters, ContextTypes, CommandHandler # ✅ הוספנו CommandHandler
+from telegram.ext import ApplicationBuilder, MessageHandler, filters, ContextTypes, CommandHandler 
 from google.cloud import texttospeech
 
 # 📁 קובץ לשמירת היסטוריית הודעות
 LAST_MESSAGES_FILE = "last_messages.json"
-MAX_HISTORY = 16 # ✅ שונה מ־10 ל־16
+MAX_HISTORY = 16 
 
 # 📁 קובץ הגדרות סינון
 FILTERS_FILE = "filters.json"
@@ -172,7 +172,7 @@ def clean_text(text):
         add_moked_credit = True
 
     # --- בדיקה עם רשימות הסינון הנטענות ---
-    global STRICT_BANNED, WORD_BANNED, BLOCKED_PHRASES # שימוש ברשימות הגלובליות
+    global STRICT_BANNED, WORD_BANNED, BLOCKED_PHRASES 
 
     # קבוצה ראשונה – מחפשים בכל מקום (STRICT_BANNED)
     for banned in STRICT_BANNED:
@@ -193,11 +193,30 @@ def clean_text(text):
     text = re.sub(r'https?://\S+', '', text)
     text = re.sub(r'www\.\S+', '', text)
     text = re.sub(r'[^\w\s.,!?()\u0590-\u05FF]', '', text)
+    
+    # ⚠️ חשוב: ניקוי הרווחים והפסיקים לפני הוספת הקרדיט
     text = re.sub(r'\s+', ' ', text).strip()
-
-    # ✅ הוספת קרדיט אם התחיל ב'חדשות המוקד'
+    
+    # ✅ שינוי: הוספת קרדיט בצורה חכמה יותר
     if add_moked_credit:
-        text += ", המוקד"
+        if not text:
+            # אם הטקסט נמחק לחלוטין (כמו במקרה של 'חדשות המוקד' בלבד)
+            text = "המוקד" 
+        else:
+            # אם נשאר טקסט כלשהו, נוסיף פסיק ורווח
+            text += ", המוקד"
+
+    # ⚠️ ניקוי סופי של פסיקים ורווחים מובילים שיכלו להיווצר
+    text = text.strip()
+    while text.startswith(','):
+        text = text[1:].strip()
+
+    # ******************** ✅ התיקון הקריטי החדש ********************
+    if not text:
+        reason = "⛔️ הודעה לא נשלחה: הטקסט המקורי נוקה לחלוטין עקב ביטויים חסומים."
+        print(reason)
+        return None, reason
+    # *****************************************************************
 
     return text, None
 
