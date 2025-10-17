@@ -28,6 +28,8 @@ BLOCKED_PHRASES = []
 STRICT_BANNED = []
 WORD_BANNED = []
 ALLOWED_LINKS = []
+# ✅ חדש: רשימת מספרי טלפון מאושרים
+ALLOWED_PHONES = [] 
 
 # ✅ חדש: ביטוי רגולרי לזיהוי מספרי טלפון
 # דוגמאות למה שנתפס: 050-1234567, 03 1234567, 1700-123456
@@ -38,7 +40,8 @@ FILTER_MAPPING = {
     "ניקוי": "BLOCKED_PHRASES",
     "איסור-חזק": "STRICT_BANNED",
     "איסור-מילה": "WORD_BANNED",
-    "קישורים": "ALLOWED_LINKS"
+    "קישורים": "ALLOWED_LINKS",
+    "מספרים-מאושרים": "ALLOWED_PHONES" # ✅ חדש
 }
 
 def load_last_messages():
@@ -61,33 +64,43 @@ def save_last_messages(messages):
 
 # ⚙️ פונקציה לטעינת הגדרות הסינון
 def load_filters():
-    global BLOCKED_PHRASES, STRICT_BANNED, WORD_BANNED, ALLOWED_LINKS
+    global BLOCKED_PHRASES, STRICT_BANNED, WORD_BANNED, ALLOWED_LINKS, ALLOWED_PHONES
+    
+    # הגדרות ברירת מחדל מלאות
+    default_data = {
+        "BLOCKED_PHRASES": [],
+        "STRICT_BANNED": [],
+        "WORD_BANNED": [],
+        "ALLOWED_LINKS": [],
+        "ALLOWED_PHONES": [] # ✅ חדש
+    }
+
     if not os.path.exists(FILTERS_FILE):
         # יצירת קובץ ברירת מחדל אם אינו קיים
-        data = {
-            "BLOCKED_PHRASES": [],
-            "STRICT_BANNED": [],
-            "WORD_BANNED": [],
-            "ALLOWED_LINKS": []
-        }
         with open(FILTERS_FILE, "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False, indent=4)
+            json.dump(default_data, f, ensure_ascii=False, indent=4)
+        
+        # אם נוצר חדש, נשתמש בברירת המחדל
+        BLOCKED_PHRASES = default_data["BLOCKED_PHRASES"]
+        STRICT_BANNED = default_data["STRICT_BANNED"]
+        WORD_BANNED = default_data["WORD_BANNED"]
+        ALLOWED_LINKS = default_data["ALLOWED_LINKS"]
+        ALLOWED_PHONES = default_data["ALLOWED_PHONES"]
+        print("✅ נוצר קובץ הגדרות ברירת מחדל חדש.")
+        return default_data
 
     try:
         with open(FILTERS_FILE, "r", encoding="utf-8") as f:
             data = json.load(f)
         
-        # עדכון הרשימות הגלובליות
-        # רשימות שנמחקו/מנוקות (יש למיין לפי אורך)
-        BLOCKED_PHRASES = sorted(data.get("BLOCKED_PHRASES", []), key=len, reverse=True)
-        # מילים וביטויים שפוסלים לחלוטין (מופיעים בחלקן)
-        STRICT_BANNED = data.get("STRICT_BANNED", [])
-        # מילים שפוסלות רק אם מופיעות בשלמותן
-        WORD_BANNED = data.get("WORD_BANNED", [])
-        # קישורים מותרים
-        ALLOWED_LINKS = data.get("ALLOWED_LINKS", [])
-        
-        print(f"✅ נטענו בהצלחה {len(BLOCKED_PHRASES)} ביטויי ניקוי, {len(STRICT_BANNED)} ביטויים פוסלים, {len(WORD_BANNED)} מילים פוסלות ו- {len(ALLOWED_LINKS)} קישורים מותרים.")
+        # עדכון הרשימות הגלובליות תוך שימוש ב-default_data כמקור אם מפתח חסר
+        BLOCKED_PHRASES = sorted(data.get("BLOCKED_PHRASES", default_data["BLOCKED_PHRASES"]), key=len, reverse=True)
+        STRICT_BANNED = data.get("STRICT_BANNED", default_data["STRICT_BANNED"])
+        WORD_BANNED = data.get("WORD_BANNED", default_data["WORD_BANNED"])
+        ALLOWED_LINKS = data.get("ALLOWED_LINKS", default_data["ALLOWED_LINKS"])
+        ALLOWED_PHONES = data.get("ALLOWED_PHONES", default_data["ALLOWED_PHONES"]) # ✅ טעינה
+
+        print(f"✅ נטענו בהצלחה {len(BLOCKED_PHRASES)} ניקוי, {len(STRICT_BANNED)} פוסלים, {len(WORD_BANNED)} מילים, {len(ALLOWED_LINKS)} קישורים ו- {len(ALLOWED_PHONES)} מספרים מאושרים.")
         return data
     except Exception as e:
         print(f"❌ נכשל בטעינת קובץ הגדרות סינון: {e}")
@@ -96,8 +109,10 @@ def load_filters():
 # ✅ חדש: פונקציה לשמירת הגדרות הסינון
 def save_filters(data):
     try:
+        # לוודא שכל הרשימות נשמרות לפי המפתחות שלהן
+        filtered_data = {k: data.get(k, []) for k in FILTER_MAPPING.values()}
         with open(FILTERS_FILE, "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False, indent=4)
+            json.dump(filtered_data, f, ensure_ascii=False, indent=4)
         print("✅ הגדרות הסינון נשמרו בהצלחה.")
         return True
     except Exception as e:
@@ -176,10 +191,25 @@ def clean_text(text):
         add_moked_credit = True
         
     # --- ✅ בדיקה ראשונה: האם יש מספר טלפון? ---
-    global PHONE_NUMBER_REGEX
-    if PHONE_NUMBER_REGEX.search(text):
-        print("⛔️ הודעה מכילה מספר טלפון – לא תועלה לשלוחה.")
-        return None, "⛔️ הודעה לא נשלחה: מכילה מספר טלפון."
+    global PHONE_NUMBER_REGEX, ALLOWED_PHONES
+    
+    # מציאת כל המספרים
+    found_phones = PHONE_NUMBER_REGEX.findall(text)
+    
+    if found_phones:
+        is_all_allowed = True
+        for phone in found_phones:
+            # בדיקה אם המספר שנמצא (בצורתו המקורית) אינו ברשימה המאושרת
+            if phone not in ALLOWED_PHONES:
+                is_all_allowed = False
+                break
+        
+        if not is_all_allowed:
+            print("⛔️ הודעה מכילה מספר טלפון לא מאושר – לא תועלה לשלוחה.")
+            return None, "⛔️ הודעה לא נשלחה: מכילה מספר טלפון לא מאושר."
+        
+        print("✅ הודעה מכילה מספרי טלפון, אך כולם מאושרים. ממשיך בסינון.")
+
 
     # --- בדיקה עם רשימות הסינון הנטענות ---
     global STRICT_BANNED, WORD_BANNED, BLOCKED_PHRASES # שימוש ברשימות הגלובליות
