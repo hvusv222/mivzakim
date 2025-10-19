@@ -203,7 +203,7 @@ def clean_text(text):
             if phone not in ALLOWED_PHONES:
                 is_all_allowed = False
                 break
-        
+            
         if not is_all_allowed:
             print("⛔️ הודעה מכילה מספר טלפון לא מאושר – לא תועלה לשלוחה.")
             return None, "⛔️ הודעה לא נשלחה: מכילה מספר טלפון לא מאושר."
@@ -445,6 +445,16 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 os.remove("video.mp4")
                 os.remove("video.wav")
                 return
+            
+            # ✅ התיקון: בדיקה אם הטקסט נשאר ריק לאחר הניקוי
+            if not cleaned:
+                 reason = "⛔️ הודעה לא נשלחה: הטקסט נמחק לחלוטין על ידי פילטר הניקוי."
+                 print(reason)
+                 await send_error_to_channel(reason)
+                 os.remove("video.mp4")
+                 os.remove("video.wav")
+                 return
+            
             full_text = create_full_text(cleaned)
             text_to_mp3(full_text, "text.mp3")
             convert_to_wav("text.mp3", "text.wav")
@@ -475,6 +485,13 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if reason:
                 await send_error_to_channel(reason)
             return
+
+        # ✅ התיקון: בדיקה אם הטקסט נשאר ריק לאחר הניקוי
+        if not cleaned:
+             reason = "⛔️ הודעה לא נשלחה: הטקסט נמחק לחלוטין על ידי פילטר הניקוי."
+             print(reason)
+             await send_error_to_channel(reason)
+             return
 
         last_messages = load_last_messages()
         for previous in last_messages:
