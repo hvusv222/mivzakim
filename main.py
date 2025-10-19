@@ -35,9 +35,6 @@ ALLOWED_PHONES = []
 # דוגמאות למה שנתפס: 050-1234567, 03 1234567, 1700-123456
 PHONE_NUMBER_REGEX = re.compile(r'\b(0\d{1,2}[-\s]?\d{7}|1[5-9]00[-\s]?\d{6}|05\d[-\s]?\d{7})\b')
 
-# 🆕 ביטוי רגולרי לזיהוי זמנים בפורמט HH:MM או HH.MM בטקסט
-TIME_REGEX = re.compile(r'(\b\d{1,2}[.:]\d{2}\b)')
-
 # ✅ חדש: מיפוי שמות פשוטים למפתחות JSON
 FILTER_MAPPING = {
     "ניקוי": "BLOCKED_PHRASES",
@@ -186,20 +183,6 @@ def num_to_hebrew_words(hour, minute):
     hour_12 = hour % 12 or 12
     return f"{hours_map[hour_12]} {minutes_map[minute]}"
 
-# 🆕 פונקציה שמחליפה ייצוגי זמן מספריים בתגי SSML
-def replace_times_with_ssml(text):
-    """
-    מחליף ייצוגי זמן (HH:MM או HH.MM) בטקסט בתגי SSML כדי להבטיח קריאה נכונה בעברית.
-    """
-    global TIME_REGEX
-    def replace_match(match):
-        time_str = match.group(1).replace('.', ':') # מוודא שהפורמט הוא H:M
-        # שימוש בתג SSML כדי להורות למנוע ה-TTS לקרוא את המחרוזת כזמן
-        # הדבר מבטיח שהזמן יקרא בצורה טבעית ("שתים עשרה בצהריים") ולא ספרה-ספרה.
-        return f'<say-as interpret-as="time">{time_str}</say-as>'
-
-    return TIME_REGEX.sub(replace_match, text)
-
 def clean_text(text):
     add_moked_credit = False
 
@@ -247,13 +230,9 @@ def clean_text(text):
     # --- ניקוי ביטויים (BLOCKED_PHRASES) ---
     for phrase in BLOCKED_PHRASES:
         text = text.replace(phrase, '')
-    
-    # הניקויים הקיימים:
     text = re.sub(r'https?://\S+', '', text)
     text = re.sub(r'www\.\S+', '', text)
-    # ⚠️ חשוב: לא לנקות תווי ניקוד כמו ":" או "." בגלל שהם דרושים לזיהוי הזמן!
-    # נשנה את הניקוי הכללי כדי לשמר את התווים האלה בתוך מילה
-    text = re.sub(r'[^\w\s\u0590-\u05FF.:,!?()]', '', text) # שמירה על נקודה, נקודתיים, פסיק
+    text = re.sub(r'[^\w\s.,!?()\u0590-\u05FF]', '', text)
     text = re.sub(r'\s+', ' ', text).strip()
 
     # ✅ הוספת קרדיט אם התחיל ב'חדשות המוקד'
@@ -270,13 +249,7 @@ def create_full_text(text):
 
 def text_to_mp3(text, filename='output.mp3'):
     client = texttospeech.TextToSpeechClient()
-    
-    # 🆕 אם הטקסט מכיל תגי SSML, יש לעטוף אותו בתג <speak> ולהשתמש ב-ssml=
-    if '<say-as' in text:
-        synthesis_input = texttospeech.SynthesisInput(ssml=f"<speak>{text}</speak>")
-    else:
-        synthesis_input = texttospeech.SynthesisInput(text=text)
-        
+    synthesis_input = texttospeech.SynthesisInput(text=text)
     voice = texttospeech.VoiceSelectionParams(
         language_code="he-IL",
         name="he-IL-Wavenet-B",
@@ -320,7 +293,7 @@ def contains_human_speech(wav_path, frame_duration=30):
                 convert_to_wav(wav_path, 'temp.wav')
                 wf = wave.open('temp.wav', 'rb')
             frames = wf.readframes(wf.getnframes())
-            frame_size = int(wf.getnframes() * frame_duration / 1000) * 2
+            frame_size = int(wf.getframerate() * frame_duration / 1000) * 2
             speech_detected = False
             for i in range(0, len(frames), frame_size):
                 frame = frames[i:i+frame_size]
@@ -472,11 +445,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 os.remove("video.mp4")
                 os.remove("video.wav")
                 return
-            
-            # 🆕 שלב 1: החלפת זמנים מספריים בתגי SSML
-            text_with_ssml_times = replace_times_with_ssml(cleaned)
-            
-            full_text = create_full_text(text_with_ssml_times)
+            full_text = create_full_text(cleaned)
             text_to_mp3(full_text, "text.mp3")
             convert_to_wav("text.mp3", "text.wav")
             subprocess.run(['ffmpeg', '-i', 'text.wav', '-i', 'video.wav', '-filter_complex',
@@ -518,13 +487,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         last_messages.append(cleaned)
         save_last_messages(last_messages)
 
-        # 🆕 שלב 1: החלפת זמנים מספריים בתגי SSML
-        text_with_ssml_times = replace_times_with_ssml(cleaned)
-
-        # 🆕 שלב 2: יצירת הטקסט המלא (כולל הכותרת) עם הזמנים המעובדים
-        full_text = create_full_text(text_with_ssml_times)
-
-        # 🆕 שלב 3: הפונקציה text_to_mp3 תטפל כעת ב-SSML
+        full_text = create_full_text(cleaned)
         text_to_mp3(full_text, "output.mp3")
         convert_to_wav("output.mp3", "output.wav")
         upload_to_ymot("output.wav")
