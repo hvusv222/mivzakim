@@ -445,6 +445,17 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 os.remove("video.mp4")
                 os.remove("video.wav")
                 return
+            
+            # ✅ הוספה: בדיקה אם הטקסט נמחק לחלוטין לאחר הניקוי
+            if not cleaned:
+                reason = "⛔️ הודעה לא נשלחה: הטקסט המקורי נוקה לחלוטין (מכיל רק ביטויי ניקוי או רווחים)."
+                print(reason)
+                await send_error_to_channel(reason)
+                os.remove("video.mp4")
+                os.remove("video.wav")
+                return
+            # ----------------------------------------------------
+            
             full_text = create_full_text(cleaned)
             text_to_mp3(full_text, "text.mp3")
             convert_to_wav("text.mp3", "text.wav")
@@ -475,6 +486,14 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if reason:
                 await send_error_to_channel(reason)
             return
+        
+        # ✅ הוספה: בדיקה אם הטקסט נמחק לחלוטין לאחר הניקוי
+        if not cleaned:
+            reason = "⛔️ הודעה לא נשלחה: הטקסט המקורי נוקה לחלוטין (מכיל רק ביטויי ניקוי או רווחים)."
+            print(reason)
+            await send_error_to_channel(reason)
+            return
+        # ----------------------------------------------------
 
         last_messages = load_last_messages()
         for previous in last_messages:
@@ -742,8 +761,8 @@ telegram.Bot(BOT_TOKEN).delete_webhook()
 while True:
     try:
         app.run_polling(
-            poll_interval=10.0,    # כל כמה שניות לבדוק הודעות חדשות
-            timeout=30,            # כמה זמן לחכות לפני שנזרקת שגיאת TimedOut
+            poll_interval=10.0,   # כל כמה שניות לבדוק הודעות חדשות
+            timeout=30,           # כמה זמן לחכות לפני שנזרקת שגיאת TimedOut
             allowed_updates=Update.ALL_TYPES # לוודא שכל סוגי ההודעות נתפסים
         )
     except Exception as e:
