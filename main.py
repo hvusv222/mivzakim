@@ -20,7 +20,7 @@ from google.cloud import texttospeech
 
 # 📁 קובץ לשמירת היסטוריית הודעות
 LAST_MESSAGES_FILE = "last_messages.json"
-MAX_HISTORY = 16
+MAX_HISTORY = 55
 
 # 📁 קובץ הגדרות סינון
 FILTERS_FILE = "filters.json"
@@ -405,8 +405,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = message.text or message.caption
     has_video = message.video is not None
     has_audio = message.audio is not None or message.voice is not None
-
-    text_already_uploaded = False # ✅ דגל חדש
+    
+    # ❌ הסרנו את הדגל הישן text_already_uploaded = False
 
     async def send_error_to_channel(reason):
         if context.bot:
@@ -420,11 +420,47 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             print(reason)
             await send_error_to_channel(reason)
             return
+            
+    # ✅ ✅ ✅ לוגיקה חדשה: טיפול בטקסט (סינון וכפילות) פעם אחת בלבד
+    cleaned_text = None
+    if text:
+        cleaned, reason = clean_text(text)
+        
+        if cleaned is None: # נכשל בסינון (מילה אסורה/טלפון לא מאושר)
+            if reason:
+                await send_error_to_channel(reason)
+            return
 
+        if not cleaned: # נכשל בניקוי (טקסט נמחק לחלוטין)
+            reason = "⛔️ הודעה לא נשלחה: הטקסט נמחק לחלוטין על ידי פילטר הניקוי."
+            print(reason)
+            await send_error_to_channel(reason)
+            return
+
+        # --- בדיקת כפילות (הדבר שרצית להוסיף) ---
+        last_messages = load_last_messages()
+        for previous in last_messages:
+            similarity = SequenceMatcher(None, cleaned, previous).ratio()
+            # 0.55 הוא סף סביר לכפילות, כפי שהוגדר בקוד המקורי שלך
+            if similarity >= 0.55:
+                reason = f"⏩ הודעה דומה מדי להודעה קודמת ({similarity*100:.1f}%) – לא תועלה לשלוחה."
+                print(reason)
+                await send_error_to_channel(reason)
+                return
+        
+        # אם עבר את כל הבדיקות, הטקסט מוכן ונוסיף אותו להיסטוריה
+        # זה מונע כפילות גם כשיש מדיה וגם כשיש טקסט בלבד
+        last_messages.append(cleaned)
+        save_last_messages(last_messages)
+        cleaned_text = cleaned
+        # ---------------------------------------------
+        
+    # 2. טיפול בוידאו (אם יש)
     if has_video:
         video_file = await message.video.get_file()
         await video_file.download_to_drive("video.mp4")
 
+        # 2א. בדיקת שמע בוידאו
         if not has_audio_track("video.mp4"):
             reason = "⛔️ הודעה לא נשלחה: וידאו ללא שמע."
             print(reason)
@@ -434,6 +470,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         convert_to_wav("video.mp4", "video.wav")
 
+        # 2ב. בדיקת דיבור אנושי
         if not contains_human_speech("video.wav"):
             reason = "⛔️ הודעה לא נשלחה: שמע אינו דיבור אנושי."
             print(reason)
@@ -442,41 +479,30 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             os.remove("video.wav")
             return
 
-        if text:
-            cleaned, reason_text = clean_text(text)
-            if cleaned is None:
-                if reason_text:
-                    await send_error_to_channel(reason_text)
-                os.remove("video.mp4")
-                os.remove("video.wav")
-                return
-            
-            # ✅ התיקון: בדיקה אם הטקסט נשאר ריק לאחר הניקוי
-            if not cleaned:
-                 reason = "⛔️ הודעה לא נשלחה: הטקסט נמחק לחלוטין על ידי פילטר הניקוי."
-                 print(reason)
-                 await send_error_to_channel(reason)
-                 os.remove("video.mp4")
-                 os.remove("video.wav")
-                 return
-            
-            full_text = create_full_text(cleaned)
+        # 2ג. יצירת קובץ אודיו סופי לשלוחה
+        if cleaned_text: # אם יש טקסט שעבר סינון וכפילות, צרף אותו
+            print("✅ יוצר שמע מ-TTS ומצרף לשמע הוידאו.")
+            full_text = create_full_text(cleaned_text)
             text_to_mp3(full_text, "text.mp3")
             convert_to_wav("text.mp3", "text.wav")
+            # שרשור TTS + וידאו אודיו
             subprocess.run(['ffmpeg', '-i', 'text.wav', '-i', 'video.wav', '-filter_complex',
-                             '[0:a][1:a]concat=n=2:v=0:a=1[out]', '-map', '[out]', 'media.wav', '-y'])
+                            '[0:a][1:a]concat=n=2:v=0:a=1[out]', '-map', '[out]', 'media.wav', '-y'])
             os.remove("text.mp3")
             os.remove("text.wav")
             os.remove("video.wav")
-            text_already_uploaded = True # ✅ טקסט כבר נשלח
-        else:
+        else: # אין טקסט/הטקסט היה ריק, השתמש רק בשמע הוידאו
+            print("✅ מעלה את שמע הוידאו בלבד.")
             os.rename("video.wav", "media.wav")
 
+        # 2ד. העלאה וניקוי
         upload_to_ymot("media.wav")
         os.remove("video.mp4")
         os.remove("media.wav")
 
+    # 3. טיפול באודיו (אם יש)
     elif has_audio:
+        print("✅ מעלה קובץ אודיו/הקלטה קולית.")
         audio_file = await (message.audio or message.voice).get_file()
         await audio_file.download_to_drive("audio.ogg")
         convert_to_wav("audio.ogg", "media.wav")
@@ -484,37 +510,20 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         os.remove("audio.ogg")
         os.remove("media.wav")
 
-    if text and not text_already_uploaded: # ✅ לא נשלח פעמיים
-        cleaned, reason = clean_text(text)
-        if cleaned is None:
-            if reason:
-                await send_error_to_channel(reason)
-            return
-
-        # ✅ התיקון: בדיקה אם הטקסט נשאר ריק לאחר הניקוי
-        if not cleaned:
-             reason = "⛔️ הודעה לא נשלחה: הטקסט נמחק לחלוטין על ידי פילטר הניקוי."
-             print(reason)
-             await send_error_to_channel(reason)
-             return
-
-        last_messages = load_last_messages()
-        for previous in last_messages:
-            similarity = SequenceMatcher(None, cleaned, previous).ratio()
-            if similarity >= 0.55:
-                reason = f"⏩ הודעה דומה מדי להודעה קודמת ({similarity*100:.1f}%) – לא תועלה לשלוחה."
-                print(reason)
-                await send_error_to_channel(reason)
-                return
-        last_messages.append(cleaned)
-        save_last_messages(last_messages)
-
-        full_text = create_full_text(cleaned)
+    # 4. טיפול בטקסט בלבד (אם יש טקסט ואין וידאו/אודיו)
+    elif cleaned_text: # אם הגענו לכאן, זה טקסט בלבד שכבר עבר סינון וכפילות והיסטוריה התעדכנה
+        print("✅ מעלה טקסט (TTS) בלבד.")
+        full_text = create_full_text(cleaned_text)
         text_to_mp3(full_text, "output.mp3")
         convert_to_wav("output.mp3", "output.wav")
         upload_to_ymot("output.wav")
         os.remove("output.mp3")
         os.remove("output.wav")
+
+    # ❌ הקוד המקורי הוסר:
+    # if text and not text_already_uploaded: # ✅ לא נשלח פעמיים
+    #     cleaned, reason = clean_text(text)
+    #     # ... כל לוגיקת הסינון והכפילות שהעברנו למעלה היתה כאן
 
 # 🛠️ פונקציה לבריחת תווים מיוחדים (Markdown V1)
 def escape_markdown_v1(text):
@@ -764,8 +773,8 @@ telegram.Bot(BOT_TOKEN).delete_webhook()
 while True:
     try:
         app.run_polling(
-            poll_interval=10.0,    # כל כמה שניות לבדוק הודעות חדשות
-            timeout=30,            # כמה זמן לחכות לפני שנזרקת שגיאת TimedOut
+            poll_interval=10.0,     # כל כמה שניות לבדוק הודעות חדשות
+            timeout=30,             # כמה זמן לחכות לפני שנזרקת שגיאת TimedOut
             allowed_updates=Update.ALL_TYPES # לוודא שכל סוגי ההודעות נתפסים
         )
     except Exception as e:
