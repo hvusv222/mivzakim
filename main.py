@@ -1,4 +1,4 @@
-import os 
+import os
 import json
 import subprocess
 import requests
@@ -20,44 +20,29 @@ from google.cloud import texttospeech
 
 # 📁 קובץ לשמירת היסטוריית הודעות
 LAST_MESSAGES_FILE = "last_messages.json"
-MAX_HISTORY = 16
+MAX_HISTORY = 55
 
-# 📁 הגדרות ומשתנים קריטיים ל-AI וזמנים
-# 🆕 הנחיות מערכת קשוחות ל-AI: סינון דתי, פרסומות וניקוי קרדיטים ארוכים
-SYSTEM_PROMPT = """You are a content filtering and editing engine for a strictly Haredi (Ultra-Orthodox Jewish) news broadcast platform.
-
-Your primary goal is to assess content sensitivity, filter out prohibited topics, and remove editorial spam/credits, while retaining essential news information.
-
-RULES:
-1. REJECTION: If the content contains advertisements, promotional material, profane/immodest language, or discussions of sports, secular entertainment (TV, music, movies), celebrities, or political controversy (unless it is a neutral news report), output ONLY the exact, single word: 'REJECTED'.
-2. CLEANUP: If the content is approved, output ONLY the cleaned version of the text. Remove all long/unnecessary sign-offs, credits (names, phone numbers, links), and editorial fluff. The output must be concise and ready for immediate speech synthesis.
-
-Output format MUST be strictly either the cleaned text OR 'REJECTED'."""
-
-GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent"
-
-# 🆕 ביטוי רגולרי לזיהוי זמנים בפורמט HH:MM או HH.MM בטקסט (לצורך SSML)
-TIME_REGEX = re.compile(r'(\b\d{1,2}[.:]\d{2}\b)')
-
-# 📁 קובץ הגדרות סינון (הרשימות הגלובליות נשארות, אך לא בשימוש ישיר)
+# 📁 קובץ הגדרות סינון
 FILTERS_FILE = "filters.json"
 BLOCKED_PHRASES = []
 STRICT_BANNED = []
 WORD_BANNED = []
 ALLOWED_LINKS = []
+# ✅ חדש: רשימת מספרי טלפון מאושרים
 ALLOWED_PHONES = [] 
 
-# ✅ חדש: מיפוי שמות פשוטים למפתחות JSON (נשאר לטובת load/save)
+# ✅ חדש: ביטוי רגולרי לזיהוי מספרי טלפון
+# דוגמאות למה שנתפס: 050-1234567, 03 1234567, 1700-123456
+PHONE_NUMBER_REGEX = re.compile(r'\b(0\d{1,2}[-\s]?\d{7}|1[5-9]00[-\s]?\d{6}|05\d[-\s]?\d{7})\b')
+
+# ✅ חדש: מיפוי שמות פשוטים למפתחות JSON
 FILTER_MAPPING = {
     "ניקוי": "BLOCKED_PHRASES",
     "איסור-חזק": "STRICT_BANNED",
     "איסור-מילה": "WORD_BANNED",
     "קישורים": "ALLOWED_LINKS",
-    "מספרים-מאושרים": "ALLOWED_PHONES"
+    "מספרים-מאושרים": "ALLOWED_PHONES" # ✅ חדש
 }
-# ---------------------------------------------
-# פונקציות load/save נשארות כפי שהן
-# ---------------------------------------------
 
 def load_last_messages():
     if not os.path.exists(LAST_MESSAGES_FILE):
@@ -77,38 +62,54 @@ def save_last_messages(messages):
     except Exception as e:
         print(f"⚠️ שגיאה בשמירת היסטוריית הודעות: {e}")
 
-# ⚙️ פונקציה לטעינת הגדרות הסינון (נשארת לטובת עבודה יציבה)
+# ⚙️ פונקציה לטעינת הגדרות הסינון
 def load_filters():
     global BLOCKED_PHRASES, STRICT_BANNED, WORD_BANNED, ALLOWED_LINKS, ALLOWED_PHONES
     
+    # הגדרות ברירת מחדל מלאות
     default_data = {
-        "BLOCKED_PHRASES": [], "STRICT_BANNED": [], "WORD_BANNED": [],
-        "ALLOWED_LINKS": [], "ALLOWED_PHONES": []
+        "BLOCKED_PHRASES": [],
+        "STRICT_BANNED": [],
+        "WORD_BANNED": [],
+        "ALLOWED_LINKS": [],
+        "ALLOWED_PHONES": [] # ✅ חדש
     }
 
     if not os.path.exists(FILTERS_FILE):
+        # יצירת קובץ ברירת מחדל אם אינו קיים
         with open(FILTERS_FILE, "w", encoding="utf-8") as f:
             json.dump(default_data, f, ensure_ascii=False, indent=4)
+        
+        # אם נוצר חדש, נשתמש בברירת המחדל
+        BLOCKED_PHRASES = default_data["BLOCKED_PHRASES"]
+        STRICT_BANNED = default_data["STRICT_BANNED"]
+        WORD_BANNED = default_data["WORD_BANNED"]
+        ALLOWED_LINKS = default_data["ALLOWED_LINKS"]
+        ALLOWED_PHONES = default_data["ALLOWED_PHONES"]
+        print("✅ נוצר קובץ הגדרות ברירת מחדל חדש.")
         return default_data
 
     try:
         with open(FILTERS_FILE, "r", encoding="utf-8") as f:
             data = json.load(f)
         
+        # עדכון הרשימות הגלובליות תוך שימוש ב-default_data כמקור אם מפתח חסר
         BLOCKED_PHRASES = sorted(data.get("BLOCKED_PHRASES", default_data["BLOCKED_PHRASES"]), key=len, reverse=True)
         STRICT_BANNED = data.get("STRICT_BANNED", default_data["STRICT_BANNED"])
         WORD_BANNED = data.get("WORD_BANNED", default_data["WORD_BANNED"])
         ALLOWED_LINKS = data.get("ALLOWED_LINKS", default_data["ALLOWED_LINKS"])
-        ALLOWED_PHONES = data.get("ALLOWED_PHONES", default_data["ALLOWED_PHONES"])
+        ALLOWED_PHONES = data.get("ALLOWED_PHONES", default_data["ALLOWED_PHONES"]) # ✅ טעינה
 
-        print(f"✅ נטעו נתוני הגדרות (לא משמשים לסינון הראשי, אלא לניהול).")
+        print(f"✅ נטענו בהצלחה {len(BLOCKED_PHRASES)} ניקוי, {len(STRICT_BANNED)} פוסלים, {len(WORD_BANNED)} מילים, {len(ALLOWED_LINKS)} קישורים ו- {len(ALLOWED_PHONES)} מספרים מאושרים.")
         return data
     except Exception as e:
         print(f"❌ נכשל בטעינת קובץ הגדרות סינון: {e}")
         return None
 
+# ✅ חדש: פונקציה לשמירת הגדרות הסינון
 def save_filters(data):
     try:
+        # לוודא שכל הרשימות נשמרות לפי המפתחות שלהן
         filtered_data = {k: data.get(k, []) for k in FILTER_MAPPING.values()}
         with open(FILTERS_FILE, "w", encoding="utf-8") as f:
             json.dump(filtered_data, f, ensure_ascii=False, indent=4)
@@ -134,19 +135,23 @@ except Exception as e:
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 YMOT_TOKEN = os.getenv("YMOT_TOKEN")
 YMOT_PATH = os.getenv("YMOT_PATH", "ivr2:90/")
-ADMIN_USER_ID = os.getenv("ADMIN_USER_ID")
+# ✅ חדש: מזהה משתמש אדמין לשליטה בפילטרים
+ADMIN_USER_ID = os.getenv("ADMIN_USER_ID") # מומלץ להגדיר כמשתנה סביבה!
 
 # טוען את הפילטרים מיד לאחר הגדרת המשתנים הגלובליים
 try:
     filter_data = load_filters()
 except Exception as e:
     print(e)
+    # אפשרות להמשיך עם רשימות ריקות אם הטעינה נכשלה, או לזרוק את השגיאה
     pass
 
 # 🔒 פונקציה לבדיקת הרשאת אדמין
 def is_admin(user_id):
     if not ADMIN_USER_ID:
+        # אם אין ADMIN_USER_ID מוגדר, אף אחד לא אדמין
         return False
+    # בדיקה אם המשתמש הוא האדמין המוגדר (ADMIN_USER_ID הוא סטרינג)
     return str(user_id) == ADMIN_USER_ID
 
 # 🔢 המרת מספרים לעברית
@@ -178,76 +183,69 @@ def num_to_hebrew_words(hour, minute):
     hour_12 = hour % 12 or 12
     return f"{hours_map[hour_12]} {minutes_map[minute]}"
 
-# 🆕 פונקציה שמחליפה ייצוגי זמן מספריים בתגי SSML
-def replace_times_with_ssml(text):
-    """
-    מחליף ייצוגי זמן (HH:MM או HH.MM) בטקסט בתגי SSML כדי להבטיח קריאה נכונה בעברית.
-    """
-    global TIME_REGEX
-    def replace_match(match):
-        # מוודא שהפורמט הוא H:M ע"י החלפת נקודה בנקודתיים
-        time_str = match.group(1).replace('.', ':') 
-        # שימוש בתג SSML להורות למנוע ה-TTS לקרוא כזמן
-        return f'<say-as interpret-as="time">{time_str}</say-as>'
+def clean_text(text):
+    add_moked_credit = False
 
-    # מחפש תבנית זמן בטקסט ומחליף אותה בייצוג SSML
-    return TIME_REGEX.sub(replace_match, text)
-
-
-# 🟢 🟢 🟢 הפונקציה המרכזית החדשה לסינון וניקוי באמצעות AI 🟢 🟢 🟢
-async def ai_filter_and_clean(text):
-    """
-    שולח את הטקסט למודל Gemini לסינון (דחייה/אישור) וניקוי (הסרת קרדיטים/פרסומות).
-    """
-    if not text.strip():
-        return None, "⛔️ הודעה ריקה."
+    # בדיקה אם ההודעה מתחילה במילים 'חדשות המוקד'
+    if text.strip().startswith("חדשות המוקד"):
+        add_moked_credit = True
         
-    try:
-        # יצירת מטען נתונים ל-API
-        payload = {
-            "contents": [{"parts": [{"text": text}]}],
-            "systemInstruction": {"parts": [{"text": SYSTEM_PROMPT}]},
-        }
-        
-        # שימוש ב-asyncio.to_thread להפעלת requests.post באופן לא חוסם
-        response = await asyncio.to_thread(
-            requests.post,
-            f"{GEMINI_API_URL}?key={os.getenv('GEMINI_API_KEY')}",
-            headers={'Content-Type': 'application/json'},
-            json=payload,
-            timeout=20 # זמן המתנה סביר לתגובה מ-AI
-        )
-        response.raise_for_status() # זורק חריגה לקודי סטטוס שגויים
-        
-        result = response.json()
-        
-        # בדיקה של התוצאה
-        cleaned_text = result['candidates'][0]['content']['parts'][0]['text'].strip()
-
-    except Exception as e:
-        print(f"❌ שגיאה חריגה בבדיקת AI: {e}")
-        # אם יש שגיאה ב-AI, נפסול את ההודעה כדי להימנע מתוכן לא מסונן
-        return None, f"⚠️ שגיאה בבדיקת AI. לא ניתן לאשר את ההודעה." 
-        
-    # בדיקה אם ה-AI החליט לפסול
-    if cleaned_text == 'REJECTED':
-        print("⛔️ AI פסל את ההודעה (תוכן אסור/פרסומת).")
-        return None, "⛔️ הודעה נפסלה על ידי מסנן AI (תוכן לא תואם/פרסומת)."
-
-    # בדיקה אחרונה: אם ה-AI ניקה את ההודעה כולה
-    if not cleaned_text:
-        return None, "⛔️ הודעה נפסלה: הטקסט נמחק לחלוטין על ידי AI."
-
-    # ה-AI אמור להחזיר רק את הטקסט הנקי, כולל הקרדיט המינימלי
-    return cleaned_text, None
-# 🟢 🟢 🟢 סוף פונקציית AI 🟢 🟢 🟢
-
-
-# ⚠️ הפונקציה clean_text הפכה למעטפת אסינכרונית כדי להתאים ל-handle_message
-async def clean_text(text):
-    # הפונקציה הישנה clean_text מוחלפת בקריאה ל-AI
-    return await ai_filter_and_clean(text)
+    # --- ✅ בדיקה ראשונה: האם יש מספר טלפון? ---
+    global PHONE_NUMBER_REGEX, ALLOWED_PHONES
     
+    # מציאת כל המספרים
+    found_phones = PHONE_NUMBER_REGEX.findall(text)
+    
+    if found_phones:
+        is_all_allowed = True
+        for phone in found_phones:
+            # בדיקה אם המספר שנמצא (בצורתו המקורית) אינו ברשימה המאושרת
+            if phone not in ALLOWED_PHONES:
+                is_all_allowed = False
+                break
+            
+        if not is_all_allowed:
+            print("⛔️ הודעה מכילה מספר טלפון לא מאושר – לא תועלה לשלוחה.")
+            return None, "⛔️ הודעה לא נשלחה: מכילה מספר טלפון לא מאושר."
+        
+        # --- 🟢 תוספת חדשה: הסרת מספרי טלפון מהטקסט להקראה 🟢 ---
+        # אם הגענו לכאן, כל מספרי הטלפון שנמצאו (אם היו) הם מאושרים,
+        # ולכן יש להסירם מהטקסט המיועד להקראה (TTS).
+        text = PHONE_NUMBER_REGEX.sub('', text)
+        print("✅ הודעה מכילה מספרי טלפון, כולם מאושרים. מספרי הטלפון הוסרו מהטקסט המיועד להקראה. ממשיך בסינון.")
+        # --- 🟢 סוף תוספת חדשה 🟢 ---
+
+
+    # --- בדיקה עם רשימות הסינון הנטענות ---
+    global STRICT_BANNED, WORD_BANNED, BLOCKED_PHRASES # שימוש ברשימות הגלובליות
+
+    # קבוצה ראשונה – מחפשים בכל מקום (STRICT_BANNED)
+    for banned in STRICT_BANNED:
+        if banned in text:
+            print(f"⛔️ הודעה מכילה מילה אסורה ('{banned}') – לא תועלה לשלוחה.")
+            return None, f"⛔️ הודעה לא נשלחה: מכילה מילה אסורה ('{banned}')."
+
+    # קבוצה שנייה – מחפשים רק מילה שלמה (WORD_BANNED)
+    words = re.findall(r"\b\w+\b", text)
+    for banned in WORD_BANNED:
+        if banned in words:
+            print(f"⛔️ הודעה מכילה מילה אסורה ('{banned}') – לא תועלה לשלוחה.")
+            return None, f"⛔️ הודעה לא נשלחה: מכילה מילה אסורה ('{banned}')."
+
+    # --- ניקוי ביטויים (BLOCKED_PHRASES) ---
+    for phrase in BLOCKED_PHRASES:
+        text = text.replace(phrase, '')
+    text = re.sub(r'https?://\S+', '', text)
+    text = re.sub(r'www\.\S+', '', text)
+    text = re.sub(r'[^\w\s.,!?()\u0590-\u05FF]', '', text)
+    text = re.sub(r'\s+', ' ', text).strip()
+
+    # ✅ הוספת קרדיט אם התחיל ב'חדשות המוקד'
+    if add_moked_credit:
+        text += ", המוקד"
+
+    return text, None
+
 def create_full_text(text):
     tz = pytz.timezone('Asia/Jerusalem')
     now = datetime.now(tz)
@@ -256,13 +254,7 @@ def create_full_text(text):
 
 def text_to_mp3(text, filename='output.mp3'):
     client = texttospeech.TextToSpeechClient()
-    
-    # 🆕 אם הטקסט מכיל תגי SSML, יש לעטוף אותו בתג <speak> ולהשתמש ב-ssml=
-    if '<say-as' in text:
-        synthesis_input = texttospeech.SynthesisInput(ssml=f"<speak>{text}</speak>")
-    else:
-        synthesis_input = texttospeech.SynthesisInput(text=text)
-        
+    synthesis_input = texttospeech.SynthesisInput(text=text)
     voice = texttospeech.VoiceSelectionParams(
         language_code="he-IL",
         name="he-IL-Wavenet-B",
@@ -413,27 +405,62 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = message.text or message.caption
     has_video = message.video is not None
     has_audio = message.audio is not None or message.voice is not None
-
-    text_already_uploaded = False # ✅ דגל חדש
+    
+    # ❌ הסרנו את הדגל הישן text_already_uploaded = False
 
     async def send_error_to_channel(reason):
         if context.bot:
             # שימוש ב-safe_send
             await safe_send(context.bot, message.chat_id, reason) 
 
-    # 🛑 🛑 הוסרו בדיקות הקישורים הישנות (ALLOWED_LINKS) כיוון שהן מוחלפות על ידי AI 🛑 🛑
-    # if text and any(re.search(r'https?://\S+|www\.\S+', part) for part in text.split()):
-    #     if not any(link in text for link in ALLOWED_LINKS):
-    #         reason = "⛔️ הודעה לא נשלחה: קישור לא מאושר."
-    #         print(reason)
-    #         await send_error_to_channel(reason)
-    #         return
+    global ALLOWED_LINKS # שימוש ברשימה הגלובלית שנטענה
+    if text and any(re.search(r'https?://\S+|www\.\S+', part) for part in text.split()):
+        if not any(link in text for link in ALLOWED_LINKS):
+            reason = "⛔️ הודעה לא נשלחה: קישור לא מאושר."
+            print(reason)
+            await send_error_to_channel(reason)
+            return
+            
+    # ✅ ✅ ✅ לוגיקה חדשה: טיפול בטקסט (סינון וכפילות) פעם אחת בלבד
+    cleaned_text = None
+    if text:
+        cleaned, reason = clean_text(text)
+        
+        if cleaned is None: # נכשל בסינון (מילה אסורה/טלפון לא מאושר)
+            if reason:
+                await send_error_to_channel(reason)
+            return
 
+        if not cleaned: # נכשל בניקוי (טקסט נמחק לחלוטין)
+            reason = "⛔️ הודעה לא נשלחה: הטקסט נמחק לחלוטין על ידי פילטר הניקוי."
+            print(reason)
+            await send_error_to_channel(reason)
+            return
 
+        # --- בדיקת כפילות (הדבר שרצית להוסיף) ---
+        last_messages = load_last_messages()
+        for previous in last_messages:
+            similarity = SequenceMatcher(None, cleaned, previous).ratio()
+            # 0.55 הוא סף סביר לכפילות, כפי שהוגדר בקוד המקורי שלך
+            if similarity >= 0.55:
+                reason = f"⏩ הודעה דומה מדי להודעה קודמת ({similarity*100:.1f}%) – לא תועלה לשלוחה."
+                print(reason)
+                await send_error_to_channel(reason)
+                return
+        
+        # אם עבר את כל הבדיקות, הטקסט מוכן ונוסיף אותו להיסטוריה
+        # זה מונע כפילות גם כשיש מדיה וגם כשיש טקסט בלבד
+        last_messages.append(cleaned)
+        save_last_messages(last_messages)
+        cleaned_text = cleaned
+        # ---------------------------------------------
+        
+    # 2. טיפול בוידאו (אם יש)
     if has_video:
         video_file = await message.video.get_file()
         await video_file.download_to_drive("video.mp4")
 
+        # 2א. בדיקת שמע בוידאו
         if not has_audio_track("video.mp4"):
             reason = "⛔️ הודעה לא נשלחה: וידאו ללא שמע."
             print(reason)
@@ -443,6 +470,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         convert_to_wav("video.mp4", "video.wav")
 
+        # 2ב. בדיקת דיבור אנושי
         if not contains_human_speech("video.wav"):
             reason = "⛔️ הודעה לא נשלחה: שמע אינו דיבור אנושי."
             print(reason)
@@ -451,35 +479,30 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             os.remove("video.wav")
             return
 
-        if text:
-            cleaned, reason_text = await clean_text(text) # ⚠️ הפונקציה כעת אסינכרונית
-            if cleaned is None:
-                if reason_text:
-                    await send_error_to_channel(reason_text)
-                os.remove("video.mp4")
-                os.remove("video.wav")
-                return
-            
-            # 🆕 שלב 1: החלפת זמנים מספריים בתגי SSML על הטקסט הנקי מה-AI
-            text_with_ssml_times = replace_times_with_ssml(cleaned)
-            
-            full_text = create_full_text(text_with_ssml_times)
+        # 2ג. יצירת קובץ אודיו סופי לשלוחה
+        if cleaned_text: # אם יש טקסט שעבר סינון וכפילות, צרף אותו
+            print("✅ יוצר שמע מ-TTS ומצרף לשמע הוידאו.")
+            full_text = create_full_text(cleaned_text)
             text_to_mp3(full_text, "text.mp3")
             convert_to_wav("text.mp3", "text.wav")
+            # שרשור TTS + וידאו אודיו
             subprocess.run(['ffmpeg', '-i', 'text.wav', '-i', 'video.wav', '-filter_complex',
-                             '[0:a][1:a]concat=n=2:v=0:a=1[out]', '-map', '[out]', 'media.wav', '-y'])
+                            '[0:a][1:a]concat=n=2:v=0:a=1[out]', '-map', '[out]', 'media.wav', '-y'])
             os.remove("text.mp3")
             os.remove("text.wav")
             os.remove("video.wav")
-            text_already_uploaded = True # ✅ טקסט כבר נשלח
-        else:
+        else: # אין טקסט/הטקסט היה ריק, השתמש רק בשמע הוידאו
+            print("✅ מעלה את שמע הוידאו בלבד.")
             os.rename("video.wav", "media.wav")
 
+        # 2ד. העלאה וניקוי
         upload_to_ymot("media.wav")
         os.remove("video.mp4")
         os.remove("media.wav")
 
+    # 3. טיפול באודיו (אם יש)
     elif has_audio:
+        print("✅ מעלה קובץ אודיו/הקלטה קולית.")
         audio_file = await (message.audio or message.voice).get_file()
         await audio_file.download_to_drive("audio.ogg")
         convert_to_wav("audio.ogg", "media.wav")
@@ -487,36 +510,20 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         os.remove("audio.ogg")
         os.remove("media.wav")
 
-    if text and not text_already_uploaded: # ✅ לא נשלח פעמיים
-        cleaned, reason = await clean_text(text) # ⚠️ הפונקציה כעת אסינכרונית
-        if cleaned is None:
-            if reason:
-                await send_error_to_channel(reason)
-            return
-
-        last_messages = load_last_messages()
-        for previous in last_messages:
-            similarity = SequenceMatcher(None, cleaned, previous).ratio()
-            if similarity >= 0.55:
-                reason = f"⏩ הודעה דומה מדי להודעה קודמת ({similarity*100:.1f}%) – לא תועלה לשלוחה."
-                print(reason)
-                await send_error_to_channel(reason)
-                return
-        last_messages.append(cleaned)
-        save_last_messages(last_messages)
-
-        # 🆕 שלב 1: החלפת זמנים מספריים בתגי SSML
-        text_with_ssml_times = replace_times_with_ssml(cleaned)
-
-        # 🆕 שלב 2: יצירת הטקסט המלא (כולל הכותרת) עם הזמנים המעובדים
-        full_text = create_full_text(text_with_ssml_times)
-
-        # 🆕 שלב 3: הפונקציה text_to_mp3 תטפל כעת ב-SSML
+    # 4. טיפול בטקסט בלבד (אם יש טקסט ואין וידאו/אודיו)
+    elif cleaned_text: # אם הגענו לכאן, זה טקסט בלבד שכבר עבר סינון וכפילות והיסטוריה התעדכנה
+        print("✅ מעלה טקסט (TTS) בלבד.")
+        full_text = create_full_text(cleaned_text)
         text_to_mp3(full_text, "output.mp3")
         convert_to_wav("output.mp3", "output.wav")
         upload_to_ymot("output.wav")
         os.remove("output.mp3")
         os.remove("output.wav")
+
+    # ❌ הקוד המקורי הוסר:
+    # if text and not text_already_uploaded: # ✅ לא נשלח פעמיים
+    #     cleaned, reason = clean_text(text)
+    #     # ... כל לוגיקת הסינון והכפילות שהעברנו למעלה היתה כאן
 
 # 🛠️ פונקציה לבריחת תווים מיוחדים (Markdown V1)
 def escape_markdown_v1(text):
@@ -766,8 +773,8 @@ telegram.Bot(BOT_TOKEN).delete_webhook()
 while True:
     try:
         app.run_polling(
-            poll_interval=10.0,    # כל כמה שניות לבדוק הודעות חדשות
-            timeout=30,            # כמה זמן לחכות לפני שנזרקת שגיאת TimedOut
+            poll_interval=10.0,     # כל כמה שניות לבדוק הודעות חדשות
+            timeout=30,             # כמה זמן לחכות לפני שנזרקת שגיאת TimedOut
             allowed_updates=Update.ALL_TYPES # לוודא שכל סוגי ההודעות נתפסים
         )
     except Exception as e:
