@@ -290,8 +290,18 @@ def clean_text(text):
     # --- ניקוי ביטויים (BLOCKED_PHRASES) ---
     for phrase in BLOCKED_PHRASES:
         text = text.replace(phrase, '')
-    text = re.sub(r'https://?://\S+', '', text)
-    text = re.sub(r'www\.\S+', '', text)
+        
+    # --- 🟢🟢🟢 תיקון הקישורים כאן 🟢🟢🟢 ---
+    # מחליף את שתי השורות הישנות בשורה אחת חזקה יותר
+    # השורות הישנות היו:
+    # text = re.sub(r'https?://\S+', '', text)
+    # text = re.sub(r'www\.\S+', '', text)
+    
+    # שורה מתוקנת שמסירה http, https, www, וגם דומיינים כמו example.com
+    # זה מונע הקראה של קישורים מאושרים שעברו את הבדיקה
+    text = re.sub(r'(?:https?://|www\.)\S+|\b[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}\b', '', text, flags=re.IGNORECASE)
+    # --- 🟢🟢🟢 סוף התיקון 🟢🟢🟢 ---
+
     text = re.sub(r'[^\w\s.,!?()\u0590-\u05FF]', '', text)
     text = re.sub(r'\s+', ' ', text).strip()
 
