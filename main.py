@@ -31,11 +31,15 @@ ALLOWED_LINKS = []
 # ✅ חדש: רשימת מספרי טלפון מאושרים
 ALLOWED_PHONES = [] 
 
+# ✅ תוספת חדשה: קובץ הגדרות החלפת מילים
+REPLACEMENTS_FILE = "replacements.json"
+WORD_REPLACEMENTS = {} # יכיל מילון, לדוגמה: {"ה": "השם"}
+
 # ✅ חדש: ביטוי רגולרי לזיהוי מספרי טלפון
 # דוגמאות למה שנתפס: 050-1234567, 03 1234567, 1700-123456
 PHONE_NUMBER_REGEX = re.compile(r'\b(0\d{1,2}[-\s]?\d{7}|1[5-9]00[-\s]?\d{6}|05\d[-\s]?\d{7})\b')
 
-# ✅ חדש: מיפוי שמות פשוטים למפתחות JSON
+# ✅ חדש: מיפוי שמות פשוטים למפתחות JSON (עבור פילטרים)
 FILTER_MAPPING = {
     "ניקוי": "BLOCKED_PHRASES",
     "איסור-חזק": "STRICT_BANNED",
@@ -119,6 +123,49 @@ def save_filters(data):
         print(f"❌ שגיאה בשמירת הגדרות סינון: {e}")
         return False
 
+# ✅ תוספת חדשה: פונקציה לטעינת החלפות מילים
+def load_replacements():
+    global WORD_REPLACEMENTS
+    default_data = {} # ברירת המחדל היא מילון ריק
+    
+    if not os.path.exists(REPLACEMENTS_FILE):
+        with open(REPLACEMENTS_FILE, "w", encoding="utf-8") as f:
+            json.dump(default_data, f, ensure_ascii=False, indent=4)
+        WORD_REPLACEMENTS = default_data
+        print("✅ נוצר קובץ החלפות מילים חדש (ריק).")
+        return default_data
+    
+    try:
+        with open(REPLACEMENTS_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        # לוודא שזה מילון
+        if not isinstance(data, dict):
+             raise Exception("הקובץ אינו מכיל מילון (אובייקט JSON)")
+        WORD_REPLACEMENTS = data
+        print(f"✅ נטענו בהצלחה {len(WORD_REPLACEMENTS)} החלפות מילים.")
+        return data
+    except Exception as e:
+        print(f"❌ נכשל בטעינת קובץ החלפות: {e}. משתמש במילון ריק.")
+        WORD_REPLACEMENTS = default_data
+        return default_data
+
+# ✅ תוספת חדשה: פונקציה לשמירת החלפות מילים
+def save_replacements(data):
+    global WORD_REPLACEMENTS
+    if not isinstance(data, dict):
+        print("❌ שגיאה: ניסיון לשמור החלפות שאינן מילון.")
+        return False
+        
+    WORD_REPLACEMENTS = data # עדכון המשתנה הגלובלי
+    try:
+        with open(REPLACEMENTS_FILE, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=4)
+        print("✅ החלפות המילים נשמרו בהצלחה.")
+        return True
+    except Exception as e:
+        print(f"❌ שגיאה בשמירת החלפות מילים: {e}")
+        return False
+
 # 🟡 כתיבת קובץ מפתח Google מ־BASE64
 key_b64 = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS_B64")
 if not key_b64:
@@ -145,6 +192,14 @@ except Exception as e:
     print(e)
     # אפשרות להמשיך עם רשימות ריקות אם הטעינה נכשלה, או לזרוק את השגיאה
     pass
+
+# ✅ תוספת חדשה: טעינת החלפות המילים בהפעלה
+try:
+    replacements_data = load_replacements()
+except Exception as e:
+    print(e)
+    pass
+
 
 # 🔒 פונקציה לבדיקת הרשאת אדמין
 def is_admin(user_id):
@@ -235,7 +290,7 @@ def clean_text(text):
     # --- ניקוי ביטויים (BLOCKED_PHRASES) ---
     for phrase in BLOCKED_PHRASES:
         text = text.replace(phrase, '')
-    text = re.sub(r'https?://\S+', '', text)
+    text = re.sub(r'https://?://\S+', '', text)
     text = re.sub(r'www\.\S+', '', text)
     text = re.sub(r'[^\w\s.,!?()\u0590-\u05FF]', '', text)
     text = re.sub(r'\s+', ' ', text).strip()
@@ -245,6 +300,33 @@ def clean_text(text):
         text += ", המוקד"
 
     return text, None
+
+# ✅ תוספת חדשה: פונקציה להחלת החלפות מילים
+def apply_replacements(text, replacements_map):
+    """
+    מחליף מילים בטקסט לפי מילון, תוך שימוש בגבולות מילה (\b).
+    ממיין מפתחות מהארוך לקצר למניעת החלפות חלקיות.
+    """
+    if not replacements_map:
+        return text
+
+    # מיון לפי אורך המפתח, מהארוך לקצר (למשל, כדי ש"ב"ה" יוחלף לפני "ה")
+    try:
+        sorted_keys = sorted(replacements_map.keys(), key=len, reverse=True)
+        
+        for key in sorted_keys:
+            value = replacements_map[key]
+            # שימוש ב-re.escape כדי לטפל בתווים מיוחדים במפתח (כמו נקודות)
+            # שימוש ב-\b כדי להבטיח החלפה של מילה שלמה בלבד
+            pattern = r'\b' + re.escape(key) + r'\b'
+            text = re.sub(pattern, value, text)
+            
+    except Exception as e:
+        print(f"⚠️ שגיאה בהחלת החלפות מילים: {e}")
+        # ממשיך עם הטקסט כפי שהוא
+    
+    return text
+
 
 def create_full_text(text):
     tz = pytz.timezone('Asia/Jerusalem')
@@ -358,11 +440,11 @@ def upload_to_ymot(wav_file_path):
 
 
 # ✅ ✅ ✅ פונקציה חדשה – מוקדם יותר בקוד
-async def safe_send(bot, chat_id, text):
+async def safe_send(bot, chat_id, text, **kwargs):
     """שולח הודעה לטלגרם עם טיפול ב-429"""
     for i in range(5): # עד 5 ניסיונות
         try:
-            await bot.send_message(chat_id=chat_id, text=text)
+            await bot.send_message(chat_id=chat_id, text=text, **kwargs)
             return
         except Exception as e:
             if "429" in str(e):
@@ -452,7 +534,15 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # זה מונע כפילות גם כשיש מדיה וגם כשיש טקסט בלבד
         last_messages.append(cleaned)
         save_last_messages(last_messages)
-        cleaned_text = cleaned
+        
+        # ✅ תוספת חדשה: החלת החלפות מילים
+        # עושים זאת *אחרי* בדיקת הכפילות, אבל *לפני* השליחה ל-TTS
+        global WORD_REPLACEMENTS
+        if WORD_REPLACEMENTS:
+            print(f"🔍 מחיל {len(WORD_REPLACEMENTS)} החלפות מילים...")
+            cleaned_text = apply_replacements(cleaned, WORD_REPLACEMENTS)
+        else:
+            cleaned_text = cleaned
         # ---------------------------------------------
         
     # 2. טיפול בוידאו (אם יש)
@@ -480,8 +570,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
 
         # 2ג. יצירת קובץ אודיו סופי לשלוחה
-        if cleaned_text: # אם יש טקסט שעבר סינון וכפילות, צרף אותו
-            print("✅ יוצר שמע מ-TTS ומצרף לשמע הוידאו.")
+        if cleaned_text: # אם יש טקסט שעבר סינון, כפילות והחלפה, צרף אותו
+            print("✅ יוצר שמע מ-TTS (עם החלפות) ומצרף לשמע הוידאו.")
             full_text = create_full_text(cleaned_text)
             text_to_mp3(full_text, "text.mp3")
             convert_to_wav("text.mp3", "text.wav")
@@ -511,8 +601,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         os.remove("media.wav")
 
     # 4. טיפול בטקסט בלבד (אם יש טקסט ואין וידאו/אודיו)
-    elif cleaned_text: # אם הגענו לכאן, זה טקסט בלבד שכבר עבר סינון וכפילות והיסטוריה התעדכנה
-        print("✅ מעלה טקסט (TTS) בלבד.")
+    elif cleaned_text: # אם הגענו לכאן, זה טקסט בלבד שכבר עבר סינון, כפילות, היסטוריה והחלפה
+        print("✅ מעלה טקסט (TTS) בלבד (עם החלפות).")
         full_text = create_full_text(cleaned_text)
         text_to_mp3(full_text, "output.mp3")
         convert_to_wav("output.mp3", "output.wav")
@@ -522,8 +612,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # ❌ הקוד המקורי הוסר:
     # if text and not text_already_uploaded: # ✅ לא נשלח פעמיים
-    #     cleaned, reason = clean_text(text)
-    #     # ... כל לוגיקת הסינון והכפילות שהעברנו למעלה היתה כאן
+    #    cleaned, reason = clean_text(text)
+    #    # ... כל לוגיקת הסינון והכפילות שהעברנו למעלה היתה כאן
 
 # 🛠️ פונקציה לבריחת תווים מיוחדים (Markdown V1)
 def escape_markdown_v1(text):
@@ -531,6 +621,7 @@ def escape_markdown_v1(text):
     Escapes special characters (*, _, `, [) for Telegram's Markdown V1 parsing 
     to prevent BadRequest errors when displaying user-defined filter items.
     """
+    text = str(text) # לוודא שזה סטרינג
     text = text.replace('*', '\\*')
     text = text.replace('_', '\\_')
     text = text.replace('`', '\\`')
@@ -636,7 +727,7 @@ async def view_filter_command(update: Update, context: ContextTypes.DEFAULT_TYPE
 
         for msg in messages:
             # שימוש ב-safe_send כדי למנוע חסימה
-            await safe_send(context.bot, update.effective_chat.id, msg)
+            await safe_send(context.bot, update.effective_chat.id, msg, parse_mode="Markdown")
             await asyncio.sleep(0.5) # מניעת 429
             
     else:
@@ -750,6 +841,100 @@ async def remove_filter_command(update: Update, context: ContextTypes.DEFAULT_TY
     else:
         await update.message.reply_text("❌ שגיאה בשמירת הקובץ. הפריט לא הוסר.")
     
+# --- ✅ תוספת חדשה: פקודות לניהול החלפות מילים ---
+
+# 📜 פקודת /list_replacements: הצגת כל ההחלפות
+async def list_replacements_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    if not is_admin(user_id):
+        await update.message.reply_text("❌ אין לך הרשאה לבצע פעולה זו.")
+        return
+
+    # טעינה מחדש של הנתונים העדכניים
+    current_data = load_replacements()
+    
+    if not current_data:
+        await update.message.reply_text("ℹ️ רשימת החלפות המילים ריקה.")
+        return
+
+    response = "📜 *רשימת החלפות מילים פעילות* 📜\n"
+    response += "הבוט יחליף (כמילה שלמה) את הקיצור בצד ימין במילה המלאה בצד שמאל:\n\n"
+    
+    try:
+        # מיון לפי מפתח (הקיצור)
+        sorted_items = sorted(current_data.items())
+        
+        for key, value in sorted_items:
+            response += f"`{escape_markdown_v1(key)}` ⬅️ `{escape_markdown_v1(value)}`\n"
+
+        if len(response) > 4000:
+             await update.message.reply_text(response[:4000] + "\n... (הרשימה ארוכה מדי להצגה מלאה)")
+        else:
+             await update.message.reply_text(response, parse_mode="Markdown")
+            
+    except Exception as e:
+        await update.message.reply_text(f"⚠️ שגיאה ביצירת הרשימה: {e}")
+
+# ➕ פקודת /add_replacement: הוספה או עדכון החלפה
+async def add_replacement_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    if not is_admin(user_id):
+        await update.message.reply_text("❌ אין לך הרשאה לבצע פעולה זו.")
+        return
+
+    # מצפה לפורמט: /add_replacement <מילה-לחיפוש> <מילה-להחלפה>
+    if len(context.args) < 2:
+        await update.message.reply_text("⚠️ שימוש: /add_replacement <קיצור> <החלפה מלאה>\nלדוגמה: `/add_replacement ה השם`", parse_mode="Markdown")
+        return
+
+    key = context.args[0]
+    value = " ".join(context.args[1:])
+
+    current_data = load_replacements()
+    current_data[key] = value
+
+    if save_replacements(current_data):
+        # אין צורך בטעינה מחדש, save_replacements מעדכן את המשתנה הגלובלי
+        escaped_key = escape_markdown_v1(key)
+        escaped_value = escape_markdown_v1(value)
+        await update.message.reply_text(f"✅ החלפה נוספה/עודכנה:\n`{escaped_key}` ⬅️ `{escaped_value}`", parse_mode="Markdown")
+    else:
+        await update.message.reply_text("❌ שגיאה בשמירת קובץ ההחלפות.")
+
+# ➖ פקודת /remove_replacement: הסרת החלפה
+async def remove_replacement_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    if not is_admin(user_id):
+        await update.message.reply_text("❌ אין לך הרשאה לבצע פעולה זו.")
+        return
+
+    # מצפה לפורמט: /remove_replacement <מילה-לחיפוש>
+    if len(context.args) != 1:
+        await update.message.reply_text("⚠️ שימוש: /remove_replacement <קיצור>\nלדוגמה: `/remove_replacement ה`", parse_mode="Markdown")
+        return
+
+    key = context.args[0]
+
+    current_data = load_replacements()
+    
+    if key not in current_data:
+        await update.message.reply_text(f"ℹ️ הקיצור `{escape_markdown_v1(key)}` לא נמצא ברשימת ההחלפות.", parse_mode="Markdown")
+        return
+
+    # שמירת הערך שהוסר להצגה
+    removed_value = current_data.pop(key)
+
+    if save_replacements(current_data):
+        escaped_key = escape_markdown_v1(key)
+        escaped_value = escape_markdown_v1(removed_value)
+        await update.message.reply_text(f"✅ החלפה הוסרה:\n`{escaped_key}` (היה ⬅️ `{escaped_value}`)", parse_mode="Markdown")
+    else:
+        # אם השמירה נכשלה, נחזיר את הערך כדי למנוע חוסר עקביות
+        current_data[key] = removed_value
+        await update.message.reply_text("❌ שגיאה בשמירת הקובץ. ההסרה בוטלה.")
+
+# --- סוף תוספת חדשה ---
+    
 # ♻️ keep alive
 from keep_alive import keep_alive
 keep_alive()
@@ -764,6 +949,12 @@ app.add_handler(CommandHandler("add_filter", add_filter_command, filters=filters
 app.add_handler(CommandHandler("remove_filter", remove_filter_command, filters=filters.ChatType.PRIVATE))
 app.add_handler(CommandHandler("view_filter", view_filter_command, filters=filters.ChatType.PRIVATE))
 
+# ✅ תוספת חדשה: הוספת CommandHandler לניהול החלפות מילים
+app.add_handler(CommandHandler("list_replacements", list_replacements_command, filters=filters.ChatType.PRIVATE))
+app.add_handler(CommandHandler("add_replacement", add_replacement_command, filters=filters.ChatType.PRIVATE))
+app.add_handler(CommandHandler("remove_replacement", remove_replacement_command, filters=filters.ChatType.PRIVATE))
+
+
 print("🚀 הבוט מאזין לערוץ ומעלה לשלוחה 🎧")
 
 import telegram
@@ -773,10 +964,10 @@ telegram.Bot(BOT_TOKEN).delete_webhook()
 while True:
     try:
         app.run_polling(
-            poll_interval=10.0,     # כל כמה שניות לבדוק הודעות חדשות
-            timeout=30,             # כמה זמן לחכות לפני שנזרקת שגיאת TimedOut
+            poll_interval=10.0,      # כל כמה שניות לבדוק הודעות חדשות
+            timeout=30,              # כמה זמן לחכות לפני שנזרקת שגיאת TimedOut
             allowed_updates=Update.ALL_TYPES # לוודא שכל סוגי ההודעות נתפסים
         )
     except Exception as e:
         print("❌ שגיאה כללית בהרצת הבוט:", e)
-        time.sleep(30) # לחכות 5 שניות ואז להפעיל מחדש את הבוט
+        time.sleep(30) # לחכות 30 שניות ואז להפעיל מחדש את הבוט
