@@ -563,6 +563,15 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # 2א. בדיקת שמע בוידאו
         if not has_audio_track("video.mp4"):
             reason = "⛔️ הודעה לא נשלחה: וידאו ללא שמע."
+            
+            # --- 🛠️ התיקון: מחיקת הטקסט מהזיכרון אם הוידאו נכשל 🛠️ ---
+            if cleaned_text:
+                last_messages = load_last_messages()
+                if last_messages and last_messages[-1] == cleaned_text:
+                    last_messages.pop()  # מוחק את ההודעה האחרונה
+                    save_last_messages(last_messages)
+            # -----------------------------------------------------------
+
             print(reason)
             await send_error_to_channel(reason)
             os.remove("video.mp4")
@@ -573,6 +582,15 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # 2ב. בדיקת דיבור אנושי
         if not contains_human_speech("video.wav"):
             reason = "⛔️ הודעה לא נשלחה: שמע אינו דיבור אנושי."
+            
+            # --- 🛠️ התיקון: מחיקת הטקסט מהזיכרון אם הוידאו נכשל 🛠️ ---
+            if cleaned_text:
+                last_messages = load_last_messages()
+                if last_messages and last_messages[-1] == cleaned_text:
+                    last_messages.pop()  # מוחק את ההודעה האחרונה
+                    save_last_messages(last_messages)
+            # -----------------------------------------------------------
+
             print(reason)
             await send_error_to_channel(reason)
             os.remove("video.mp4")
