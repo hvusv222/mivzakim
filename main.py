@@ -299,7 +299,7 @@ def clean_text(text):
     
     # שורה מתוקנת שמסירה http, https, www, וגם דומיינים כמו example.com
     # זה מונע הקראה של קישורים מאושרים שעברו את הבדיקה
-    text = re.sub(r'(?:https?://|www\.)\S+|\b[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}\b', '', text, flags=re.IGNORECASE)
+    text = re.sub(r'(?:https?://|www\.)\S+|\b[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}\S*', '', text, flags=re.IGNORECASE)
     # --- 🟢🟢🟢 סוף התיקון 🟢🟢🟢 ---
 
     text = re.sub(r'[^\w\s.,!?()\u0590-\u05FF]', '', text)
