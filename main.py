@@ -986,7 +986,12 @@ app.add_handler(CommandHandler("remove_replacement", remove_replacement_command,
 print("🚀 הבוט מאזין לערוץ ומעלה לשלוחה 🎧")
 
 import telegram
-telegram.Bot(BOT_TOKEN).delete_webhook()
+try:
+    asyncio.run(telegram.Bot(BOT_TOKEN).delete_webhook())
+except Exception as e:
+    # Ignore if loop is already running or other specific errors if needed, 
+    # but at top level usually fine.
+    print(f"Warning during webhook deletion: {e}")
 
 # ▶️ לולאת הרצה אינסופית
 while True:
