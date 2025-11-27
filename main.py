@@ -349,7 +349,7 @@ def text_to_mp3(text, filename='output.mp3'):
     synthesis_input = texttospeech.SynthesisInput(text=text)
     voice = texttospeech.VoiceSelectionParams(
         language_code="he-IL",
-        name="he-IL-Wavenet-B",
+        name="he-IL-Wavenet-D",
         ssml_gender=texttospeech.SsmlVoiceGender.MALE
     )
     audio_config = texttospeech.AudioConfig(
