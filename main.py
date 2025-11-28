@@ -1,4 +1,4 @@
-import os
+;mport os
 import json
 import subprocess
 import requests
@@ -342,7 +342,7 @@ def create_full_text(text):
     tz = pytz.timezone('Asia/Jerusalem')
     now = datetime.now(tz)
     hebrew_time = num_to_hebrew_words(now.hour, now.minute)
-    return f"{hebrew_time} במבזקים-פלוס, {text}"
+    return f"{hebrew_time} בְּמִבְזָקִים-פְּלוּס, {text}"
 
 def text_to_mp3(text, filename='output.mp3'):
     client = texttospeech.TextToSpeechClient()
